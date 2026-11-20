@@ -11,8 +11,13 @@ import {
 import Slider from '@react-native-community/slider';
 import { LanguageSelector, LanguageCode } from './components/LanguageSelector';
 import { Audio, AVPlaybackStatus } from 'expo-av';
-import axios from 'axios';
 import { Sentence } from './constants/types';
+import {
+  audioFileUrl,
+  buildSentenceSearchUrl,
+  fetchSentencePage,
+  firstTranslationWithAudio,
+} from './services/tatoeba';
 
 interface AppState {
   fromLang: LanguageCode;
@@ -54,7 +59,6 @@ const LANGUAGES = {
 };
 
 export default function App() {
-  const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tatoeba.org/en/api_v0/search';
   const [state, setState] = useState<AppState>({
     fromLang: 'deu',
     toLang: 'eng',
@@ -79,6 +83,8 @@ export default function App() {
   const repeatOriginalAfterTranslationRef = useRef(state.repeatOriginalAfterTranslation);
   const playbackController = useRef<AbortController | null>(null);
   const currentPlaybackId = useRef(0);
+  const sentencesRef = useRef<Sentence[]>([]);
+  const nextPageUrlRef = useRef<string | null>(null);
 
   const handleSentenceDelayChange = (value: number) => {
     sentenceDelayRef.current = value; // Update ref
@@ -140,30 +146,38 @@ export default function App() {
         setState(s => ({ ...s, isLoading: true }));
       }
 
-      const params: Record<string, string> = {
-        from: state.fromLang,
-        to: state.toLang,
-        trans_to: state.toLang,
-        has_audio: 'yes',
-        trans_has_audio: 'yes',
-        sort: 'random',
-        page: '1',
-      };
+      const url = append
+        ? nextPageUrlRef.current
+        : buildSentenceSearchUrl({ from: state.fromLang, to: state.toLang });
 
-      const response = await axios.get<{ results: Sentence[] }>(API_URL, { params });
+      if (!url) {
+        // No more pages available.
+        setState(s => ({ ...s, isLoading: false }));
+        return;
+      }
+
+      const page = await fetchSentencePage(url);
+      nextPageUrlRef.current = page.next;
+
+      const nextSentences = append
+        ? [...sentencesRef.current, ...page.sentences]
+        : page.sentences;
+      sentencesRef.current = nextSentences;
 
       if (isMounted.current) {
         setState(s => ({
           ...s,
-          sentences: append ? [...s.sentences, ...response.data.results] : response.data.results,
+          sentences: nextSentences,
           isLoading: false,
           currentIndex: append ? s.currentIndex : 0,
           isPlaying: append ? s.isPlaying : false,
         }));
       }
     } catch (error) {
-      console.error(error);
-      setState(s => ({ ...s, isLoading: false }));
+      console.error('Error fetching sentences:', error);
+      if (isMounted.current) {
+        setState(s => ({ ...s, isLoading: false }));
+      }
     }
   };
 
@@ -198,7 +212,7 @@ export default function App() {
     await stopAudio();
     if (signal?.aborted) return;
 
-    const audioUrl = `https://tatoeba.org/audio/download/${audioId}`;
+    const audioUrl = audioFileUrl({ id: audioId });
     console.log('Attempting to play audio from URL:', audioUrl);
 
     try {
@@ -264,24 +278,10 @@ export default function App() {
       });
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
-      console.error('Error playing audio:', error);
+      // Some recordings cannot be reused outside of Tatoeba (HTTP 403). Don't
+      // stop the whole autoplay session because of a single bad file.
+      console.warn('Skipping unplayable audio:', error);
       setState(s => ({ ...s, isAudioLoading: false, isAudioPlaying: false }));
-      throw error;
-    }
-  };
-
-  const findTranslationWithAudio = (translations: Sentence['translations'] | undefined) => {
-    if (!translations) {
-      return null; // Handle the case where translations are undefined
-    }
-
-    for (let i = 0; i < translations.length; i++) {
-      for (let j = 0; j < translations[i].length; j++) {
-        const translation = translations[i][j];
-        if (translation?.audios?.length) {
-          return translation;
-        }
-      }
     }
   };
 
@@ -301,16 +301,21 @@ export default function App() {
     playbackController.current = controller;
     const playbackId = ++currentPlaybackId.current;
 
-    console.log('currentIndex:', currentIndex, 'Total sentences:', state.sentences.length);
+    console.log('currentIndex:', currentIndex, 'Total sentences:', sentencesRef.current.length);
 
     try {
       // Fetch more sentences if we're nearing the end
-      if (currentIndex >= state.sentences.length - 5) {
+      if (currentIndex >= sentencesRef.current.length - 5) {
         await fetchMoreSentences();
       }
 
-      const currentSentence = state.sentences[currentIndex];
-      const translation = findTranslationWithAudio(currentSentence.translations);
+      const currentSentence = sentencesRef.current[currentIndex];
+      if (!currentSentence) {
+        console.warn('No sentence available at index', currentIndex);
+        setState(s => ({ ...s, isPlaying: false }));
+        return;
+      }
+      const translation = firstTranslationWithAudio(currentSentence);
 
       console.log('', currentSentence);
 
@@ -416,7 +421,9 @@ export default function App() {
   };
 
   const currentSentence = state.sentences[state.currentIndex];
-  const translation = currentSentence ? findTranslationWithAudio(currentSentence.translations) : null;
+  const translation = currentSentence ? firstTranslationWithAudio(currentSentence) : null;
+  const currentAudioAuthor = currentSentence?.audios?.[0]?.author;
+  const translationAudioAuthor = translation?.audios?.[0]?.author;
 
   return (
     <ScrollView style={styles.container}>
@@ -456,7 +463,27 @@ export default function App() {
             <View style={styles.card}>
 
 
-              <Text style={styles.attributionText}>Current speakers: <Text style={styles.linkText} onPress={() => Linking.openURL('http://tatoeba.org/eng/user/profile/' + currentSentence.audios[0].author)}>{currentSentence.audios[0].author}</Text> (Original) and <Text style={styles.linkText} onPress={() => Linking.openURL('http://tatoeba.org/eng/user/profile/' + translation?.audios[0].author)}>{translation?.audios[0].author}</Text> (Translation)</Text>
+              <Text style={styles.attributionText}>
+                Current speakers:{' '}
+                {currentAudioAuthor ? (
+                  <Text
+                    style={styles.linkText}
+                    onPress={() => Linking.openURL(`https://tatoeba.org/en/user/profile/${currentAudioAuthor}`)}
+                  >
+                    {currentAudioAuthor}
+                  </Text>
+                ) : 'Unknown'}{' '}
+                (Original) and{' '}
+                {translationAudioAuthor ? (
+                  <Text
+                    style={styles.linkText}
+                    onPress={() => Linking.openURL(`https://tatoeba.org/en/user/profile/${translationAudioAuthor}`)}
+                  >
+                    {translationAudioAuthor}
+                  </Text>
+                ) : 'Unknown'}{' '}
+                (Translation)
+              </Text>
 
               {/* Sentence and Translation */}
               <View style={styles.sentenceContainer}>

@@ -1,11 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { LanguageSelector, LanguageCode } from './components/LanguageSelector';
 import { Sentence } from './constants/types';
 import { useAudioPlayer } from 'expo-audio';
+import { audioFileUrl, buildSentenceSearchUrl, fetchSentencePage } from './services/tatoeba';
 
 const diff = require('diff');
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tatoeba.org/en/api_v0/search';
+
+interface DiffPart {
+    value: string;
+    added?: boolean;
+    removed?: boolean;
+}
 
 export default function App() {
     const [targetLang, setTargetLang] = useState<LanguageCode>('deu');
@@ -17,29 +23,33 @@ export default function App() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [showTranslation, setShowTranslation] = useState(false);
+    const inputRef = useRef<TextInput>(null);
 
     const fetchSentences = async () => {
         setLoading(true);
         setError('');
         try {
-            const response = await fetch(`${API_URL}/search?from=${targetLang}&to=${nativeLang}&has_audio=yes&original=yes&sort=random`);
-            const data = await response.json();
+            const url = buildSentenceSearchUrl({
+                from: targetLang,
+                to: nativeLang,
+                // Dictation only needs the translation text, not its audio.
+                requireTranslationAudio: false,
+            });
+            const { sentences: fetched } = await fetchSentencePage(url, {
+                requireTranslationAudio: false,
+            });
 
-            if (data.results?.length > 0) {
-                const validSentences = data.results.filter(
-                    (sentence: Sentence) => sentence.translations && sentence.translations[0]?.length > 0
-                );
-
-                if (validSentences.length === 0) {
-                    setError('No translations found for selected languages');
-                } else {
-                    setSentences(validSentences);
-                    setCurrentIndex(0);
-                    setShowTranslation(false);
-                }
-            } else {
-                setError('No sentences found');
+            if (fetched.length === 0) {
+                setSentences([]);
+                setError('No sentences found for selected languages');
+                return;
             }
+
+            setSentences(fetched);
+            setCurrentIndex(0);
+            setSubmitted(false);
+            setUserInputText('');
+            setShowTranslation(false);
         } catch (err) {
             setError('Failed to fetch sentences');
             console.error(err);
@@ -68,18 +78,20 @@ export default function App() {
         }
     };
 
-    const differences = submitted && sentences[currentIndex].translations
-        ? diff.diffWords(userInputText, sentences[currentIndex].text || '', { ignoreCase: true })
+    const currentSentence = sentences[currentIndex];
+    const currentAudio = currentSentence?.audios?.[0];
+
+    const differences = submitted && currentSentence
+        ? diff.diffWords(userInputText, currentSentence.text || '', { ignoreCase: true })
         : [];
 
     useEffect(() => {
         if (currentIndex < sentences.length - 1) {
-            this.userInput.focus();
+            inputRef.current?.focus();
         }
     }, [sentences, currentIndex]);
 
-    const audioUrl = `https://tatoeba.org/audio/download/${sentences[currentIndex]?.audios[0].id}`;
-    const player = useAudioPlayer(audioUrl);
+    const player = useAudioPlayer(currentAudio ? audioFileUrl(currentAudio) : null);
 
     return (
         <ScrollView contentContainerStyle={styles.container}>
@@ -143,12 +155,12 @@ export default function App() {
                         </TouchableOpacity>
 
                         {showTranslation && (
-                            <Text style={styles.translationText}>{sentences[currentIndex].translations[0][0]?.text}</Text>
+                            <Text style={styles.translationText}>{currentSentence?.translations[0]?.text}</Text>
                         )}
                     </View>
 
                     <TextInput
-                        ref={(input) => { this.userInput = input; }}
+                        ref={inputRef}
                         style={[styles.input, styles.userInput]}
                         placeholder="Type your best"
                         value={userInputText}
@@ -167,7 +179,7 @@ export default function App() {
                         <View style={styles.resultContainer}>
                             <Text style={styles.resultHeading}>Correct Sentence:</Text>
                             <View style={styles.correctSentence}>
-                                {differences.filter(part => !part.removed).map((part, i) => (
+                                {differences.filter((part: DiffPart) => !part.removed).map((part: DiffPart, i: number) => (
                                     <Text
                                         key={i}
                                         style={part.added ? styles.addedText : styles.normalText}
