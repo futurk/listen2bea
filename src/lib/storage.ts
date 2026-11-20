@@ -1,5 +1,5 @@
-import 'expo-sqlite/localStorage/install';
 import { LANGUAGES, type LanguageCode } from './languages';
+import { getItem, setItem } from './localStore';
 
 export interface Settings {
   from: LanguageCode;
@@ -17,18 +17,12 @@ export const DEFAULT_SETTINGS: Settings = {
 
 const STORAGE_KEY = 'listen2bea.settings.v1';
 
-const hasStorage = (): boolean => typeof localStorage !== 'undefined';
-
 const isLanguageCode = (value: unknown): value is LanguageCode =>
   typeof value === 'string' && value in LANGUAGES;
 
 export function loadSettings(): Settings {
-  if (!hasStorage()) {
-    return DEFAULT_SETTINGS;
-  }
-
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = getItem(STORAGE_KEY);
     if (!raw) {
       return DEFAULT_SETTINGS;
     }
@@ -53,13 +47,9 @@ export function loadSettings(): Settings {
 }
 
 export function saveSettings(settings: Settings): void {
-  if (!hasStorage()) {
-    return;
-  }
-
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    setItem(STORAGE_KEY, JSON.stringify(settings));
   } catch {
-    // Storage can be unavailable (private mode, quota); settings are optional.
+    // Settings are optional; ignore serialization failures.
   }
 }
