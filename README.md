@@ -9,6 +9,10 @@ Practice listening comprehension with [Tatoeba](https://tatoeba.org) sentences.
 
 [https://listen2bea.expo.app](https://listen2bea.expo.app)
 
+## Inspiration
+
+This project is inspired by Speechling's [listening practice](https://speechling.com/listening) and [dictation practice](https://speechling.com/dictation).
+
 ## Stack
 
 - Expo SDK 58 (`expo ~58.0.26`)
