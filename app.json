@@ -1,48 +1,12 @@
 {
   "expo": {
-    "name": "Listen2Bea",
-    "slug": "speechling",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "listen2bea",
-    "userInterfaceStyle": "light",
-    "ios": {
-      "supportsTablet": true
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "predictiveBackGestureEnabled": false
-    },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
-    },
-    "plugins": [
-      "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
-        }
-      ],
-      "expo-asset"
-    ],
-    "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
-    },
     "extra": {
       "eas": {
-        "projectId": "78df09d4-6d0e-4ffd-bdf1-44448d1c2367"
+        "projectId": "2ca1b9cd-4c05-43a0-9b6e-8507534e2ef3"
       }
+    },
+    "android": {
+      "package": "com.futurk.listen2bea"
     }
   }
 }
