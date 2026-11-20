@@ -5,6 +5,10 @@ Practice listening comprehension with [Tatoeba](https://tatoeba.org) sentences.
 - **Freeplay** — continuous playback of an original sentence, its translation, and an optional repeat, with an adjustable pause.
 - **Dictation** — listen to a sentence, type it, and compare your answer with the expected text.
 
+## Live app
+
+[https://listen2bea.expo.app](https://listen2bea.expo.app)
+
 ## Stack
 
 - Expo SDK 58 (`expo ~58.0.26`)
