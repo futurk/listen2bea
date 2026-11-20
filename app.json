@@ -1,13 +1,12 @@
 {
   "expo": {
-    "name": "speechling",
+    "name": "Listen2Bea",
     "slug": "speechling",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "scheme": "listen2bea",
+    "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true
     },
@@ -15,7 +14,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "bundler": "metro",
@@ -33,10 +33,11 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-audio"
+      "expo-asset"
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "reactCompiler": true
     },
     "extra": {
       "eas": {
