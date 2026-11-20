@@ -11,7 +11,7 @@ Practice listening comprehension with [Tatoeba](https://tatoeba.org) sentences.
 - React Native 0.88 / React 19.3
 - Expo Router 58 (`src/app`)
 - `expo-audio` for playback
-- Tatoeba v1 API (`https://api.tatoeba.org/v1`)
+- Tatoeba v1 API (`https://api.tatoeba.org/v1`), documented at [api.tatoeba.org/openapi.json](https://api.tatoeba.org/openapi.json)
 - TypeScript, ESLint, Jest
 
 ## Development
