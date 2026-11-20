@@ -1,37 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { AudioCredits } from '@/components/AudioCredits';
 import { Attribution } from '@/components/Attribution';
 import { Button } from '@/components/Button';
 import { LanguagePicker } from '@/components/LanguagePicker';
 import { Screen } from '@/components/Screen';
-import { isAbortError, useClipPlayer } from '@/hooks/useClipPlayer';
+import { useFreeplayPlaylist } from '@/hooks/useFreeplayPlaylist';
 import { useSentenceQueue } from '@/hooks/useSentenceQueue';
 import { useSettings } from '@/hooks/useSettings';
 import type { LanguageCode } from '@/lib/languages';
-import { audioFileUrl, firstTranslationWithAudio } from '@/lib/tatoeba';
-
-const sleep = (milliseconds: number, signal: AbortSignal): Promise<void> =>
-  new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new DOMException('Aborted', 'AbortError'));
-      return;
-    }
-
-    let timer: ReturnType<typeof setTimeout>;
-
-    const finish = (action: () => void) => {
-      clearTimeout(timer);
-      signal.removeEventListener('abort', onAbort);
-      action();
-    };
-
-    const onAbort = () =>
-      finish(() => reject(new DOMException('Aborted', 'AbortError')));
-
-    timer = setTimeout(() => finish(resolve), milliseconds);
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
+import { firstTranslationWithAudio } from '@/lib/tatoeba';
 
 export default function FreeplayScreen() {
   const { settings, update } = useSettings();
@@ -40,147 +18,65 @@ export default function FreeplayScreen() {
     to: settings.to,
     requireTranslationAudio: true,
   });
-  const { play: playClip, stop: stopClip } = useClipPlayer();
+  const {
+    currentIndex,
+    currentSentence,
+    playing,
+    play,
+    pause,
+    next,
+    previous,
+    reset,
+    restart,
+  } = useFreeplayPlaylist({
+    sentences,
+    sentencesRef,
+    loadMore,
+    settings,
+  });
 
-  const [index, setIndex] = useState(0);
-  const [playing, setPlaying] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
-  const controllerRef = useRef<AbortController | null>(null);
-  const runIdRef = useRef(0);
-  const mountedRef = useRef(true);
-  const settingsRef = useRef(settings);
-
-  const displayIndex =
-    sentences.length === 0 ? 0 : Math.min(index, sentences.length - 1);
-
-  useEffect(() => {
-    settingsRef.current = settings;
-  }, [settings]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      controllerRef.current?.abort();
-    };
-  }, []);
-
-  const stopPlayback = useCallback(() => {
-    runIdRef.current++;
-    controllerRef.current?.abort();
-    controllerRef.current = null;
-    stopClip();
-    setPlaying(false);
-  }, [stopClip]);
-
-  const runFrom = useCallback(
-    async (startIndex: number) => {
-      const runId = ++runIdRef.current;
-      controllerRef.current?.abort();
-      const controller = new AbortController();
-      controllerRef.current = controller;
-
-      setPlaying(true);
-      setMessage(null);
-
-      try {
-        let cursor = startIndex;
-
-        while (!controller.signal.aborted && runId === runIdRef.current) {
-          if (cursor >= sentencesRef.current.length - 3) {
-            await loadMore();
-          }
-
-          const sentence = sentencesRef.current[cursor];
-          if (!sentence) {
-            break;
-          }
-
-          setIndex(cursor);
-
-          const pause = settingsRef.current.pauseSeconds * 1000;
-          const originalAudio = sentence.audios[0];
-          const translationAudio = firstTranslationWithAudio(sentence)?.audios[0];
-
-          try {
-            await playClip(audioFileUrl(originalAudio), controller.signal);
-            await sleep(pause, controller.signal);
-
-            if (translationAudio) {
-              await playClip(audioFileUrl(translationAudio), controller.signal);
-              await sleep(pause, controller.signal);
-            }
-
-            if (settingsRef.current.repeatOriginal) {
-              await playClip(audioFileUrl(originalAudio), controller.signal);
-              await sleep(pause, controller.signal);
-            }
-          } catch (clipError) {
-            if (isAbortError(clipError)) {
-              throw clipError;
-            }
-            // Skip a sentence with an unplayable clip instead of stopping.
-            if (mountedRef.current) {
-              setMessage('Skipped a sentence with unavailable audio.');
-            }
-          }
-
-          cursor++;
-        }
-      } catch (playbackError) {
-        if (!isAbortError(playbackError) && runId === runIdRef.current && mountedRef.current) {
-          setMessage(
-            playbackError instanceof Error ? playbackError.message : 'Playback failed.'
-          );
-        }
-      } finally {
-        if (runId === runIdRef.current) {
-          controllerRef.current = null;
-          stopClip();
-          if (mountedRef.current) {
-            setPlaying(false);
-          }
-        }
-      }
-    },
-    [loadMore, playClip, sentencesRef, stopClip]
-  );
+  const translation = currentSentence ? firstTranslationWithAudio(currentSentence) : null;
+  const originalAudio = currentSentence?.audios[0];
+  const translationAudio = translation?.audios[0];
 
   const togglePlayback = () => {
     if (playing) {
-      stopPlayback();
-      return;
+      pause();
+    } else {
+      play();
     }
-    void runFrom(displayIndex);
   };
 
   const changeIndex = (delta: number) => {
-    const next = Math.max(0, Math.min(sentences.length - 1, displayIndex + delta));
-    if (next === displayIndex) {
-      return;
-    }
-
-    setMessage(null);
-    if (playing) {
-      void runFrom(next);
+    if (delta > 0) {
+      next();
     } else {
-      setIndex(next);
+      previous();
     }
   };
 
   const changeLanguage = (key: 'from' | 'to', value: LanguageCode) => {
-    stopPlayback();
-    setIndex(0);
-    setMessage(null);
+    reset();
+    setShowTranslation(false);
     update(key, value);
   };
 
-  const current = sentences[displayIndex];
-  const translation = current ? firstTranslationWithAudio(current) : null;
-  const originalAudio = current?.audios[0];
-  const translationAudio = translation?.audios[0];
+  const changePause = (value: number) => {
+    const nextSettings = { ...settings, pauseSeconds: value };
+    update('pauseSeconds', value);
+    restart(nextSettings);
+  };
+
+  const toggleRepeat = () => {
+    const nextSettings = {
+      ...settings,
+      repeatOriginal: !settings.repeatOriginal,
+    };
+    update('repeatOriginal', nextSettings.repeatOriginal);
+    restart(nextSettings);
+  };
 
   return (
     <Screen>
@@ -201,17 +97,18 @@ export default function FreeplayScreen() {
         {loading
           ? 'Loading…'
           : sentences.length > 0
-            ? `${displayIndex + 1} / ${sentences.length}`
+            ? `${currentIndex + 1} / ${sentences.length}`
             : ' '}
       </Text>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {message ? <Text style={styles.notice}>{message}</Text> : null}
 
       <View style={styles.sentenceBox}>
         {loading && sentences.length === 0 ? <ActivityIndicator /> : null}
-        {current ? <Text style={styles.sentence}>{current.text}</Text> : null}
-        {current && showTranslation && translation ? (
+        {currentSentence ? (
+          <Text style={styles.sentence}>{currentSentence.text}</Text>
+        ) : null}
+        {currentSentence && showTranslation && translation ? (
           <Text style={styles.translation}>{translation.text}</Text>
         ) : null}
       </View>
@@ -220,20 +117,20 @@ export default function FreeplayScreen() {
         <Button
           label="Prev"
           onPress={() => changeIndex(-1)}
-          disabled={displayIndex <= 0}
+          disabled={!currentSentence || currentIndex <= 0}
           style={styles.control}
         />
         <Button
           label={playing ? 'Pause' : 'Play'}
           onPress={togglePlayback}
-          disabled={!current}
+          disabled={!currentSentence}
           variant="primary"
           style={styles.control}
         />
         <Button
           label="Next"
           onPress={() => changeIndex(1)}
-          disabled={!current || displayIndex >= sentences.length - 1}
+          disabled={!currentSentence || currentIndex >= sentences.length - 1}
           style={styles.control}
         />
       </View>
@@ -247,7 +144,7 @@ export default function FreeplayScreen() {
         />
         <Button
           label={`Repeat original: ${settings.repeatOriginal ? 'On' : 'Off'}`}
-          onPress={() => update('repeatOriginal', !settings.repeatOriginal)}
+          onPress={toggleRepeat}
           style={styles.option}
         />
       </View>
@@ -256,12 +153,12 @@ export default function FreeplayScreen() {
         <Text style={styles.pauseLabel}>Pause: {settings.pauseSeconds}s</Text>
         <Button
           label="-"
-          onPress={() => update('pauseSeconds', Math.max(1, settings.pauseSeconds - 1))}
+          onPress={() => changePause(Math.max(1, settings.pauseSeconds - 1))}
           disabled={settings.pauseSeconds <= 1}
         />
         <Button
           label="+"
-          onPress={() => update('pauseSeconds', Math.min(5, settings.pauseSeconds + 1))}
+          onPress={() => changePause(Math.min(5, settings.pauseSeconds + 1))}
           disabled={settings.pauseSeconds >= 5}
         />
       </View>
@@ -286,11 +183,6 @@ const styles = StyleSheet.create({
   error: {
     fontSize: 14,
     color: '#b00020',
-    textAlign: 'center',
-  },
-  notice: {
-    fontSize: 14,
-    color: '#666666',
     textAlign: 'center',
   },
   sentenceBox: {

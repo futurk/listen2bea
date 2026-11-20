@@ -44,7 +44,7 @@ Copy `.env.example` to `.env` if you need to override the Tatoeba sentences endp
 src/
   app/          Expo Router screens (_layout, index, freeplay, dictation)
   components/   small presentational components
-  hooks/        sentence queue, clip player, persisted settings
+  hooks/        sentence queue, native playlist, clip player, settings
   lib/          Tatoeba client, types, languages, storage
 ```
 
@@ -56,7 +56,9 @@ Freeplay can keep playing while the device is locked, but only in a **developmen
 - Config plugins are baked into the native binary at build time, so **Expo Go cannot apply them** and playback will stop when the screen locks there.
 - Build a development client with `npx expo run:ios` / `npx expo run:android`, or `eas build --profile development`.
 
-At runtime the app enables the session with `setAudioModeAsync({ shouldPlayInBackground: true })` and keeps lock-screen controls active while a clip is playing. Freeplay still schedules clips from JavaScript, so on some devices the sequence may pause during the silent gaps between clips when the app is suspended; single-clip playback continues.
+At runtime the app enables the session with `setAudioModeAsync({ shouldPlayInBackground: true })` and keeps lock-screen controls active while a clip is playing.
+
+Freeplay builds the whole sequence (original, pause, translation, pause, repeat) into an `expo-audio` **native playlist**. The pauses are short silence tracks in `assets/audio/`, so the playlist keeps advancing while JavaScript is suspended and the screen is locked. New sentence pages are still fetched from JavaScript; if the buffered queue runs out while the app is suspended, playback stops until the app is active again.
 
 ## Notes
 
