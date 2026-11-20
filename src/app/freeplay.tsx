@@ -138,13 +138,14 @@ export default function FreeplayScreen() {
       } finally {
         if (runId === runIdRef.current) {
           controllerRef.current = null;
+          stopClip();
           if (mountedRef.current) {
             setPlaying(false);
           }
         }
       }
     },
-    [loadMore, playClip, sentencesRef]
+    [loadMore, playClip, sentencesRef, stopClip]
   );
 
   const togglePlayback = () => {

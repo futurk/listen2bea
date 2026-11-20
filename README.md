@@ -48,6 +48,16 @@ src/
   lib/          Tatoeba client, types, languages, storage
 ```
 
+## Background playback
+
+Freeplay can keep playing while the device is locked, but only in a **development or production build**:
+
+- The `expo-audio` config plugin (`enableBackgroundPlayback: true` in `app.json`) adds the required iOS `audio` background mode and the Android media playback foreground service.
+- Config plugins are baked into the native binary at build time, so **Expo Go cannot apply them** and playback will stop when the screen locks there.
+- Build a development client with `npx expo run:ios` / `npx expo run:android`, or `eas build --profile development`.
+
+At runtime the app enables the session with `setAudioModeAsync({ shouldPlayInBackground: true })` and keeps lock-screen controls active while a clip is playing. Freeplay still schedules clips from JavaScript, so on some devices the sequence may pause during the silent gaps between clips when the app is suspended; single-clip playback continues.
+
 ## Notes
 
 - Tatoeba recordings whose author disallows reuse outside Tatoeba return HTTP 403. These have an empty `license` field and are filtered out before they reach the player.

@@ -11,6 +11,11 @@ interface PendingPlayback {
   cleanup: () => void;
 }
 
+const LOCK_SCREEN_METADATA = {
+  title: 'Listen2Bea',
+  artist: 'Tatoeba',
+};
+
 export function useClipPlayer() {
   const playerRef = useRef<AudioPlayer | null>(null);
   const pendingRef = useRef<PendingPlayback | null>(null);
@@ -30,7 +35,11 @@ export function useClipPlayer() {
   const stop = useCallback(() => {
     pendingRef.current?.abort();
     pendingRef.current = null;
-    playerRef.current?.pause();
+    const player = playerRef.current;
+    if (player) {
+      player.pause();
+      player.clearLockScreenControls();
+    }
   }, []);
 
   const play = useCallback((uri: string, signal?: AbortSignal) => {
@@ -47,6 +56,7 @@ export function useClipPlayer() {
 
       stop();
       player.replace(uri);
+      player.setActiveForLockScreen(true, LOCK_SCREEN_METADATA);
 
       let settled = false;
 
