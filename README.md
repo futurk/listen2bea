@@ -7,7 +7,7 @@ Practice listening comprehension with [Tatoeba](https://tatoeba.org) sentences.
 
 ## Live app
 
-[https://listen2bea.expo.app](https://listen2bea.expo.app)
+[https://l2b.expo.app](https://l2b.expo.app)
 
 ## Inspiration
 
