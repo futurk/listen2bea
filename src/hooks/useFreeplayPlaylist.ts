@@ -1,6 +1,5 @@
 import { useAudioPlaylist, useAudioPlaylistStatus } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
 import {
   buildPlaylistTracks,
   clamp,
@@ -10,10 +9,8 @@ import {
 import type { Settings } from '@/lib/storage';
 import type { PlayableSentence } from '@/lib/types';
 
-// expo/expo#52192: on Android, moving a lock-screen-active AudioPlaylist to a
-// track appended after setActiveForLockScreen() crashes the app. Keep the
-// native queue but skip playlist lock-screen controls on Android for now.
-const supportsPlaylistLockScreen = Platform.OS !== 'android';
+const PREFETCH_TARGET = 30;
+const PREFETCH_MAX_PAGES = 4;
 
 interface UseFreeplayPlaylistOptions {
   sentences: PlayableSentence[];
@@ -38,13 +35,13 @@ export function useFreeplayPlaylist({
   const [entries, setEntries] = useState<QueueEntry[]>([]);
   const [index, setIndex] = useState(0);
   const [started, setStarted] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
 
   const entriesRef = useRef<QueueEntry[]>([]);
   const startedRef = useRef(false);
-  const builtCountRef = useRef(0);
   const settingsRef = useRef(settings);
-  const loadingMoreRef = useRef(false);
+  const prepareIdRef = useRef(0);
   const pausedByUserRef = useRef(false);
   const interruptedRef = useRef(false);
 
@@ -77,42 +74,86 @@ export function useFreeplayPlaylist({
     status.currentIndex >= entries.length - 1 &&
     !status.playing;
 
-  const replaceQueue = useCallback(
-    (sentenceIndex: number, config: Settings, autoPlay: boolean) => {
-      const list = sentencesRef.current;
-      if (list.length === 0) {
-        return;
-      }
-
-      const start = clamp(sentenceIndex, 0, list.length - 1);
-      const tracks = buildPlaylistTracks(list.slice(start), start, config);
-
-      playlist.clear();
-      tracks.forEach((track) => playlist.add(track.source));
-
-      entriesRef.current = tracks.map((track) => track.entry);
-      setEntries(entriesRef.current);
-
-      builtCountRef.current = list.length;
-      startedRef.current = true;
-      setStarted(true);
-      setIndex(start);
-      pausedByUserRef.current = !autoPlay;
-      interruptedRef.current = false;
-      setPlaybackError(null);
-
-      if (supportsPlaylistLockScreen) {
-        playlist.setActiveForLockScreen(true, metadataForSentence(list[start]));
-      }
-      playlist.skipTo(0);
-      if (autoPlay) {
-        playlist.play();
+  const prefetch = useCallback(
+    async (minIndex: number) => {
+      let pages = 0;
+      while (
+        (sentencesRef.current.length < PREFETCH_TARGET ||
+          sentencesRef.current.length <= minIndex) &&
+        pages < PREFETCH_MAX_PAGES
+      ) {
+        const before = sentencesRef.current.length;
+        await loadMore();
+        pages++;
+        if (sentencesRef.current.length === before) {
+          break;
+        }
       }
     },
-    [playlist, sentencesRef]
+    [loadMore, sentencesRef]
+  );
+
+  const replaceQueue = useCallback(
+    async (sentenceIndex: number, config: Settings, autoPlay: boolean) => {
+      const prepareId = ++prepareIdRef.current;
+      setPreparing(true);
+      setPlaybackError(null);
+
+      try {
+        await prefetch(sentenceIndex);
+        if (prepareId !== prepareIdRef.current) {
+          return;
+        }
+
+        const list = sentencesRef.current;
+        if (list.length === 0) {
+          return;
+        }
+
+        const start = clamp(sentenceIndex, 0, list.length - 1);
+        const tracks = buildPlaylistTracks(list.slice(start), start, config);
+
+        // Never grow an active playlist: Android crashes if a lock-screen
+        // session sees a timeline change (expo/expo#52192).
+        playlist.setActiveForLockScreen(false);
+        playlist.pause();
+        playlist.clear();
+        tracks.forEach((track) => playlist.add(track.source));
+
+        entriesRef.current = tracks.map((track) => track.entry);
+        setEntries(entriesRef.current);
+
+        startedRef.current = true;
+        setStarted(true);
+        setIndex(start);
+        pausedByUserRef.current = !autoPlay;
+        interruptedRef.current = false;
+
+        playlist.setActiveForLockScreen(true, metadataForSentence(list[start]));
+        playlist.skipTo(0);
+        if (autoPlay) {
+          playlist.play();
+        }
+      } catch (error) {
+        if (prepareId === prepareIdRef.current) {
+          setPlaybackError(
+            error instanceof Error ? error.message : 'Could not prepare playback.'
+          );
+        }
+      } finally {
+        if (prepareId === prepareIdRef.current) {
+          setPreparing(false);
+        }
+      }
+    },
+    [playlist, prefetch, sentencesRef]
   );
 
   const play = useCallback(() => {
+    if (preparing) {
+      return;
+    }
+
     const needsRebuild =
       !startedRef.current ||
       atEnd ||
@@ -121,16 +162,15 @@ export function useFreeplayPlaylist({
       (!status.playing && !pausedByUserRef.current);
 
     if (needsRebuild) {
-      replaceQueue(currentIndex, settingsRef.current, true);
+      const target = atEnd ? currentIndex + 1 : currentIndex;
+      void replaceQueue(target, settingsRef.current, true);
       return;
     }
 
     pausedByUserRef.current = false;
     interruptedRef.current = false;
     setPlaybackError(null);
-    if (supportsPlaylistLockScreen) {
-      playlist.setActiveForLockScreen(true, metadataForSentence(currentSentence));
-    }
+    playlist.setActiveForLockScreen(true, metadataForSentence(currentSentence));
     playlist.play();
   }, [
     atEnd,
@@ -138,6 +178,7 @@ export function useFreeplayPlaylist({
     currentSentence,
     playbackError,
     playlist,
+    preparing,
     replaceQueue,
     status.playing,
   ]);
@@ -161,7 +202,7 @@ export function useFreeplayPlaylist({
       }
 
       if (interruptedRef.current || playbackError !== null) {
-        replaceQueue(nextIndex, settingsRef.current, true);
+        void replaceQueue(nextIndex, settingsRef.current, true);
         return;
       }
 
@@ -172,7 +213,7 @@ export function useFreeplayPlaylist({
       if (trackIndex >= 0) {
         playlist.skipTo(trackIndex);
       } else {
-        replaceQueue(nextIndex, settingsRef.current, status.playing);
+        void replaceQueue(nextIndex, settingsRef.current, status.playing);
       }
     },
     [playbackError, playlist, replaceQueue, sentencesRef, status.playing]
@@ -182,18 +223,19 @@ export function useFreeplayPlaylist({
   const previous = useCallback(() => goTo(currentIndex - 1), [currentIndex, goTo]);
 
   const reset = useCallback(() => {
+    prepareIdRef.current++;
+    playlist.setActiveForLockScreen(false);
     playlist.pause();
     playlist.clear();
-    playlist.setActiveForLockScreen(false);
 
     entriesRef.current = [];
     setEntries([]);
     startedRef.current = false;
     setStarted(false);
-    builtCountRef.current = 0;
     pausedByUserRef.current = false;
     interruptedRef.current = false;
     setPlaybackError(null);
+    setPreparing(false);
     setIndex(0);
   }, [playlist]);
 
@@ -202,54 +244,14 @@ export function useFreeplayPlaylist({
       if (!startedRef.current) {
         return;
       }
-      replaceQueue(currentIndex, config, status.playing);
+      void replaceQueue(currentIndex, config, status.playing);
     },
     [currentIndex, replaceQueue, status.playing]
   );
 
-  // Append newly fetched sentences to the native queue without interrupting it.
-  useEffect(() => {
-    if (!startedRef.current || sentences.length <= builtCountRef.current) {
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      const list = sentencesRef.current;
-      const from = builtCountRef.current;
-      if (!startedRef.current || list.length <= from) {
-        return;
-      }
-
-      const tracks = buildPlaylistTracks(list.slice(from), from, settingsRef.current);
-      tracks.forEach((track) => playlist.add(track.source));
-
-      const nextEntries = [...entriesRef.current, ...tracks.map((track) => track.entry)];
-      entriesRef.current = nextEntries;
-      setEntries(nextEntries);
-      builtCountRef.current = list.length;
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, [sentences, playlist, sentencesRef]);
-
-  // Fetch the next page before the buffered queue runs out.
-  useEffect(() => {
-    if (!startedRef.current || loadingMoreRef.current) {
-      return;
-    }
-    if (currentIndex < sentences.length - 3) {
-      return;
-    }
-
-    loadingMoreRef.current = true;
-    void loadMore().finally(() => {
-      loadingMoreRef.current = false;
-    });
-  }, [currentIndex, loadMore, sentences.length]);
-
   // Keep the lock-screen title in sync with the current sentence.
   useEffect(() => {
-    if (started && supportsPlaylistLockScreen) {
+    if (started) {
       playlist.updateLockScreenMetadata(metadataForSentence(currentSentence));
     }
   }, [currentSentence, playlist, started]);
@@ -264,6 +266,7 @@ export function useFreeplayPlaylist({
     currentIndex,
     currentSentence,
     playing,
+    preparing,
     playbackError,
     play,
     pause,

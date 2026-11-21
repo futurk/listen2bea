@@ -58,9 +58,11 @@ Freeplay can keep playing while the device is locked, but only in a **developmen
 
 At runtime the app enables the session with `setAudioModeAsync({ shouldPlayInBackground: true })` and keeps lock-screen controls active while a clip is playing.
 
-On Android, lock-screen controls for the Freeplay playlist are currently disabled because of an upstream `expo-audio` crash when a lock-screen-active playlist grows ([expo/expo#52192](https://github.com/expo/expo/issues/52192)). Audio still continues in the background, but Android may stop it after roughly 3 minutes without a media session. Dictation uses a single player and keeps its lock-screen controls.
+Freeplay builds the whole sequence (original, pause, translation, pause, repeat) into an `expo-audio` **native playlist**. The pauses are short silence tracks in `assets/audio/`, so the playlist keeps advancing while JavaScript is suspended and the screen is locked.
 
-Freeplay builds the whole sequence (original, pause, translation, pause, repeat) into an `expo-audio` **native playlist**. The pauses are short silence tracks in `assets/audio/`, so the playlist keeps advancing while JavaScript is suspended and the screen is locked. New sentence pages are still fetched from JavaScript; if the buffered queue runs out while the app is suspended, playback stops until the app is active again.
+Before starting, it prefetches roughly 30 sentences and builds the entire native queue. It never appends to a playlist that is already active, which avoids an upstream Android crash when a lock-screen session sees a timeline change ([expo/expo#52192](https://github.com/expo/expo/issues/52192)). When the buffered batch ends, press Play to fetch and start the next batch.
+
+If a network error interrupts playback, the player enters an error state; pressing Play rebuilds the queue from the current sentence and retries.
 
 ## Notes
 

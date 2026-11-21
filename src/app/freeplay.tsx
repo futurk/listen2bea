@@ -22,6 +22,7 @@ export default function FreeplayScreen() {
     currentIndex,
     currentSentence,
     playing,
+    preparing,
     playbackError,
     play,
     pause,
@@ -43,6 +44,9 @@ export default function FreeplayScreen() {
   const translationAudio = translation?.audios[0];
 
   const togglePlayback = () => {
+    if (preparing) {
+      return;
+    }
     if (playing) {
       pause();
     } else {
@@ -95,11 +99,13 @@ export default function FreeplayScreen() {
       </View>
 
       <Text style={styles.tracker}>
-        {loading
-          ? 'Loading…'
-          : sentences.length > 0
-            ? `${currentIndex + 1} / ${sentences.length}`
-            : ' '}
+        {preparing
+          ? 'Preparing…'
+          : loading
+            ? 'Loading…'
+            : sentences.length > 0
+              ? `${currentIndex + 1} / ${sentences.length}`
+              : ' '}
       </Text>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -119,20 +125,22 @@ export default function FreeplayScreen() {
         <Button
           label="Prev"
           onPress={() => changeIndex(-1)}
-          disabled={!currentSentence || currentIndex <= 0}
+          disabled={preparing || !currentSentence || currentIndex <= 0}
           style={styles.control}
         />
         <Button
-          label={playing ? 'Pause' : 'Play'}
+          label={preparing ? 'Preparing…' : playing ? 'Pause' : 'Play'}
           onPress={togglePlayback}
-          disabled={!currentSentence}
+          disabled={preparing || !currentSentence}
           variant="primary"
           style={styles.control}
         />
         <Button
           label="Next"
           onPress={() => changeIndex(1)}
-          disabled={!currentSentence || currentIndex >= sentences.length - 1}
+          disabled={
+            preparing || !currentSentence || currentIndex >= sentences.length - 1
+          }
           style={styles.control}
         />
       </View>
