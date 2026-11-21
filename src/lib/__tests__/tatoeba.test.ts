@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
   audioFileUrl,
   buildSentenceSearchUrl,
@@ -61,6 +61,10 @@ describe('buildSentenceSearchUrl', () => {
 });
 
 describe('audio filtering', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('treats empty or whitespace licenses as unusable', () => {
     expect(isReusableAudio(usableAudio(1))).toBe(true);
     expect(isReusableAudio(usableAudio(1, ''))).toBe(false);
@@ -113,6 +117,61 @@ describe('audio filtering', () => {
     expect(prepared.audios.map((audio) => audio.id)).toEqual([12]);
     expect(prepared.translations[0].primaryAudioId).toBe(14);
     expect(prepared.translations[0].audios.map((audio) => audio.id)).toEqual([14]);
+  });
+
+  it('shuffles eligible recordings when the primary one is not reusable', () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0.99);
+
+    const [prepared] = prepareSentences(
+      [
+        sentence({
+          audios: [usableAudio(20, ''), usableAudio(21), usableAudio(22)],
+          translations: [
+            {
+              id: 23,
+              text: 'Hi.',
+              lang: 'eng',
+              is_direct: true,
+              audios: [usableAudio(24, ''), usableAudio(25), usableAudio(26)],
+            },
+          ],
+        }),
+      ],
+      false
+    );
+
+    expect(prepared.audios.map((audio) => audio.id)).toEqual([22, 21]);
+    expect(prepared.primaryAudioId).toBe(20);
+    expect(prepared.translations[0].audios.map((audio) => audio.id)).toEqual([
+      26, 25,
+    ]);
+    expect(prepared.translations[0].primaryAudioId).toBe(24);
+  });
+
+  it('keeps the primary recording first when it is reusable', () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0.99);
+
+    const [prepared] = prepareSentences(
+      [
+        sentence({
+          audios: [usableAudio(30), usableAudio(31), usableAudio(32)],
+        }),
+      ],
+      false
+    );
+
+    expect(prepared.audios.map((audio) => audio.id)).toEqual([30, 31, 32]);
+  });
+
+  it('does not shuffle when only one recording is reusable', () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+
+    const [prepared] = prepareSentences(
+      [sentence({ audios: [usableAudio(40, ''), usableAudio(41)] })],
+      false
+    );
+
+    expect(prepared.audios.map((audio) => audio.id)).toEqual([41]);
   });
 
   it('drops sentences without a usable original recording', () => {

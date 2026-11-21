@@ -62,21 +62,37 @@ export function buildSentenceSearchUrl({
 export const isReusableAudio = (audio: Audio): boolean =>
   (audio.license ?? '').trim().length > 0;
 
-const reusableAudios = (audios: Audio[] | undefined): Audio[] =>
-  (audios ?? []).filter(isReusableAudio);
+/**
+ * Keeps only reusable recordings. When the API's first recording cannot be
+ * reused but several others can, pick one of them at random so playback does
+ * not always fall back to the same voice. Keeping the primary recording first
+ * when it is reusable also keeps the fast static audio URL available.
+ */
+const playableAudios = (audios: Audio[] | undefined): Audio[] => {
+  const all = audios ?? [];
+  const eligible = all.filter(isReusableAudio);
+  const primaryIsReusable = all.length > 0 && isReusableAudio(all[0]);
+
+  if (primaryIsReusable || eligible.length < 2) {
+    return eligible;
+  }
+
+  const pick = Math.floor(Math.random() * eligible.length);
+  return [eligible[pick], ...eligible.slice(0, pick), ...eligible.slice(pick + 1)];
+};
 
 export function toPlayableSentence(sentence: Sentence): PlayableSentence {
   const translations: PlayableTranslation[] = (sentence.translations ?? []).map(
     (translation) => ({
       ...translation,
-      audios: reusableAudios(translation.audios),
+      audios: playableAudios(translation.audios),
       primaryAudioId: translation.audios?.[0]?.id ?? null,
     })
   );
 
   return {
     ...sentence,
-    audios: reusableAudios(sentence.audios),
+    audios: playableAudios(sentence.audios),
     primaryAudioId: sentence.audios?.[0]?.id ?? null,
     translations,
   };
