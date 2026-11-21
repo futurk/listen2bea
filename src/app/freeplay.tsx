@@ -163,6 +163,7 @@ export default function FreeplayScreen() {
           accessibilityLabel={
             showTranslation ? 'Hide translation' : 'Show translation'
           }
+          tooltip={showTranslation ? 'Hides the translation.' : 'Shows the translation.'}
           onPress={() => setShowTranslation((value) => !value)}
           disabled={!translation}
           active={showTranslation}
@@ -170,6 +171,7 @@ export default function FreeplayScreen() {
         <IconButton
           name="repeat"
           accessibilityLabel={`Repeat original ${settings.repeatOriginal ? 'on' : 'off'}`}
+          tooltip="Repeats the original sentence after the translation."
           onPress={toggleRepeat}
           active={settings.repeatOriginal}
         />

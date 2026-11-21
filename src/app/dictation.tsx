@@ -165,6 +165,9 @@ export default function DictationScreen() {
               accessibilityLabel={
                 showTranslation ? 'Hide translation' : 'Show translation'
               }
+              tooltip={
+                showTranslation ? 'Hides the translation.' : 'Shows the translation.'
+              }
               onPress={() => setShowTranslation((value) => !value)}
               disabled={!translation}
               active={showTranslation}
