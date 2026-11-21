@@ -1,15 +1,25 @@
 import { useAudioPlaylist, useAudioPlaylistStatus } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  buildPlaylistTracks,
+  initialFreeplayState,
+  reduceFreeplay,
+  type FreeplayAction,
+  type FreeplayCommand,
+  type FreeplayState,
+} from '@/lib/freeplayMachine';
+import {
+  buildPlaylistPlan,
   clamp,
+  findSentenceStart,
   metadataForSentence,
-  type QueueEntry,
+  sentenceAtTrack,
+  type PlaylistPlan,
 } from '@/lib/playlist';
 import type { Settings } from '@/lib/storage';
 import type { PlayableSentence } from '@/lib/types';
 
 const NAVIGATION_SETTLE_MS = 200;
+const LOAD_SETTLE_MS = 100;
 
 interface UseFreeplayPlaylistOptions {
   sentences: PlayableSentence[];
@@ -31,103 +41,165 @@ export function useFreeplayPlaylist({
   });
   const status = useAudioPlaylistStatus(playlist);
 
-  const [entries, setEntries] = useState<QueueEntry[]>([]);
-  const [index, setIndex] = useState(0);
-  const [pendingIndex, setPendingIndex] = useState<number | null>(null);
-  const [started, setStarted] = useState(false);
-  const [fetchingMore, setFetchingMore] = useState(false);
-  const [playbackError, setPlaybackError] = useState<string | null>(null);
-
-  const entriesRef = useRef<QueueEntry[]>([]);
-  const startedRef = useRef(false);
-  const settingsRef = useRef(settings);
-  const pendingIndexRef = useRef(0);
-  const pendingNavigationRef = useRef(false);
-  const desiredPlayingRef = useRef(false);
-  const rebuildingRef = useRef(false);
+  const [state, setState] = useState<FreeplayState>(initialFreeplayState);
+  const stateRef = useRef<FreeplayState>(initialFreeplayState);
+  const applyRef = useRef<(action: FreeplayAction) => void>(() => {});
   const skipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fetchingMoreRef = useRef(false);
+  const rebuildingRef = useRef(false);
+  const loadTokenRef = useRef(0);
+  const sessionRef = useRef(0);
+
+  const buildPlan = useCallback(
+    (start: number, config: Settings = settings): PlaylistPlan | null => {
+      const list = sentencesRef.current;
+      if (list.length === 0) {
+        return null;
+      }
+      const startIndex = clamp(start, 0, list.length - 1);
+      return buildPlaylistPlan(list, startIndex, config);
+    },
+    [sentencesRef, settings]
+  );
+
+  const executeCommand = useCallback(
+    (command: FreeplayCommand) => {
+      const currentState = stateRef.current;
+
+      switch (command.type) {
+        case 'load': {
+          const token = ++loadTokenRef.current;
+          rebuildingRef.current = true;
+
+          playlist.setActiveForLockScreen(false);
+          playlist.pause();
+          playlist.clear();
+          command.plan.tracks.forEach((track) => playlist.add(track.source));
+
+          const sentence = sentencesRef.current[command.startSentence];
+          playlist.setActiveForLockScreen(true, metadataForSentence(sentence));
+          playlist.skipTo(0);
+          if (command.autoPlay) {
+            playlist.play();
+          }
+
+          setTimeout(() => {
+            if (loadTokenRef.current === token) {
+              rebuildingRef.current = false;
+            }
+          }, LOAD_SETTLE_MS);
+          return;
+        }
+
+        case 'skipToSentence': {
+          const plan = currentState.plan;
+          const trackIndex = plan
+            ? findSentenceStart(plan, command.sentenceIndex)
+            : null;
+          if (trackIndex == null) {
+            return;
+          }
+
+          playlist.skipTo(trackIndex);
+          if (command.play) {
+            const sentence = sentencesRef.current[command.sentenceIndex];
+            playlist.setActiveForLockScreen(true, metadataForSentence(sentence));
+            playlist.play();
+          }
+          return;
+        }
+
+        case 'pauseAtSentenceStart': {
+          const plan = currentState.plan;
+          const trackIndex = plan
+            ? findSentenceStart(plan, command.sentenceIndex)
+            : null;
+
+          playlist.pause();
+          if (trackIndex != null) {
+            playlist.skipTo(trackIndex);
+            void playlist.seekTo(0).catch(() => {});
+          }
+          return;
+        }
+
+        case 'resume': {
+          const sentence = sentencesRef.current[command.sentenceIndex];
+          playlist.setActiveForLockScreen(true, metadataForSentence(sentence));
+          playlist.play();
+          return;
+        }
+
+        case 'deactivate':
+          playlist.setActiveForLockScreen(false);
+          return;
+
+        case 'reset':
+          playlist.setActiveForLockScreen(false);
+          playlist.pause();
+          playlist.clear();
+          return;
+      }
+    },
+    [playlist, sentencesRef]
+  );
+
+  const apply = useCallback(
+    (action: FreeplayAction) => {
+      const transition = reduceFreeplay(stateRef.current, action);
+      stateRef.current = transition.state;
+      setState(transition.state);
+      transition.commands.forEach(executeCommand);
+    },
+    [executeCommand]
+  );
 
   useEffect(() => {
-    settingsRef.current = settings;
-  }, [settings]);
+    applyRef.current = apply;
+  }, [apply]);
 
   useEffect(() => {
     const subscription = playlist.addListener('playlistStatusUpdate', (raw) => {
-      const status = raw as unknown as {
+      const event = raw as unknown as {
         error?: unknown;
         currentIndex?: number;
+        playing?: boolean;
       };
 
-      if (status.error) {
-        if (skipTimerRef.current !== null) {
-          clearTimeout(skipTimerRef.current);
-          skipTimerRef.current = null;
+      if (event.error) {
+        if (stateRef.current.plan) {
+          applyRef.current({
+            type: 'playerError',
+            message: 'Playback interrupted. Press Play to retry.',
+          });
         }
-        desiredPlayingRef.current = false;
-        setPlaybackError('Playback interrupted. Press Play to retry.');
-        playlist.setActiveForLockScreen(false);
         return;
       }
 
-      const trackIndex = status.currentIndex;
-      if (
-        trackIndex == null ||
-        rebuildingRef.current ||
-        skipTimerRef.current !== null
-      ) {
+      if (rebuildingRef.current || event.currentIndex == null) {
         return;
       }
-      const sentenceIndex = entriesRef.current[trackIndex]?.sentenceIndex;
+
+      const plan = stateRef.current.plan;
+      if (!plan) {
+        return;
+      }
+
+      const sentenceIndex = sentenceAtTrack(plan, event.currentIndex);
       if (sentenceIndex == null) {
         return;
       }
 
-      if (pendingNavigationRef.current) {
-        if (sentenceIndex !== pendingIndexRef.current) {
-          return;
-        }
-        pendingNavigationRef.current = false;
-        setPendingIndex(null);
-        setIndex(sentenceIndex);
-        return;
-      }
+      applyRef.current({ type: 'trackChanged', sentenceIndex });
 
-      // Fallback sync for platforms where trackChanged may not arrive.
-      if (sentenceIndex !== pendingIndexRef.current) {
-        pendingIndexRef.current = sentenceIndex;
-        setIndex(sentenceIndex);
+      if (
+        event.playing === false &&
+        event.currentIndex >= plan.lastTrackIndex &&
+        stateRef.current.status !== 'ended' &&
+        stateRef.current.status !== 'interrupted'
+      ) {
+        applyRef.current({ type: 'playerEnded' });
       }
     });
-
-    return () => subscription.remove();
-  }, [playlist]);
-
-  useEffect(() => {
-    const subscription = playlist.addListener(
-      'trackChanged',
-      ({ currentIndex: trackIndex }) => {
-        if (rebuildingRef.current || skipTimerRef.current !== null) {
-          return;
-        }
-        const sentenceIndex = entriesRef.current[trackIndex]?.sentenceIndex;
-        if (sentenceIndex == null) {
-          return;
-        }
-        if (
-          pendingNavigationRef.current &&
-          sentenceIndex !== pendingIndexRef.current
-        ) {
-          return;
-        }
-        pendingIndexRef.current = sentenceIndex;
-        setIndex(sentenceIndex);
-        if (pendingNavigationRef.current) {
-          pendingNavigationRef.current = false;
-          setPendingIndex(null);
-        }
-      }
-    );
 
     return () => subscription.remove();
   }, [playlist]);
@@ -137,299 +209,251 @@ export function useFreeplayPlaylist({
       if (skipTimerRef.current !== null) {
         clearTimeout(skipTimerRef.current);
       }
+      loadTokenRef.current++;
+      sessionRef.current++;
     },
     []
   );
 
-  const activeEntry = started ? entries[status.currentIndex] : undefined;
-  const currentIndex = pendingIndex ?? activeEntry?.sentenceIndex ?? index;
-  const currentSentence = sentences[currentIndex];
-  const playing = started && status.playing;
-  const atEnd =
-    pendingIndex === null &&
-    started &&
-    entries.length > 0 &&
-    status.currentIndex >= entries.length - 1 &&
-    !status.playing;
+  const goTo = useCallback(
+    (delta: number) => {
+      const current = stateRef.current;
+      const list = sentencesRef.current;
+      if (list.length === 0 || current.fetchingMore) {
+        return;
+      }
 
-  const flushPendingSkip = useCallback(() => {
-    if (skipTimerRef.current === null) {
-      return;
-    }
-    clearTimeout(skipTimerRef.current);
-    skipTimerRef.current = null;
-
-    if (!startedRef.current) {
-      return;
-    }
-
-    const trackIndex = entriesRef.current.findIndex(
-      (entry) => entry.sentenceIndex === pendingIndexRef.current
-    );
-    if (trackIndex >= 0) {
-      playlist.skipTo(trackIndex);
-    }
-  }, [playlist]);
-
-  const replaceQueue = useCallback(
-    (sentenceIndex: number, config: Settings, autoPlay: boolean) => {
-      setPlaybackError(null);
-      desiredPlayingRef.current = autoPlay;
+      const base = current.targetSentence ?? current.currentSentence;
+      const target = clamp(base + delta, 0, list.length - 1);
+      if (target === base) {
+        return;
+      }
 
       if (skipTimerRef.current !== null) {
         clearTimeout(skipTimerRef.current);
         skipTimerRef.current = null;
       }
-      rebuildingRef.current = true;
 
-      try {
-        const list = sentencesRef.current;
-        if (list.length === 0) {
-          return;
+      if (!current.plan) {
+        apply({ type: 'setTarget', sentenceIndex: target });
+        return;
+      }
+
+      if (current.status === 'interrupted' || current.status === 'ended') {
+        const plan = buildPlan(target);
+        if (plan) {
+          apply({ type: 'replan', plan, sentenceIndex: target, autoPlay: true });
         }
+        return;
+      }
 
-        const start = clamp(sentenceIndex, 0, list.length - 1);
-        const tracks = buildPlaylistTracks(list.slice(start), start, config);
-
-        // Never grow an active playlist: Android crashes if a lock-screen
-        // session sees a timeline change (expo/expo#52192).
-        playlist.setActiveForLockScreen(false);
-        playlist.pause();
-        playlist.clear();
-        tracks.forEach((track) => playlist.add(track.source));
-
-        entriesRef.current = tracks.map((track) => track.entry);
-        setEntries(entriesRef.current);
-
-        pendingIndexRef.current = start;
-        pendingNavigationRef.current = true;
-        setPendingIndex(start);
-        startedRef.current = true;
-        setStarted(true);
-        setIndex(start);
-        rebuildingRef.current = false;
-
-        playlist.setActiveForLockScreen(true, metadataForSentence(list[start]));
-        playlist.skipTo(0);
-        if (autoPlay) {
-          playlist.play();
+      if (!current.plan.sentenceStarts.has(target)) {
+        const plan = buildPlan(target);
+        if (plan) {
+          apply({
+            type: 'replan',
+            plan,
+            sentenceIndex: target,
+            autoPlay: current.intent === 'playing',
+          });
         }
-      } catch (error) {
-        setPlaybackError(
-          error instanceof Error ? error.message : 'Could not prepare playback.'
-        );
-      } finally {
-        rebuildingRef.current = false;
-      }
-    },
-    [playlist, sentencesRef]
-  );
-
-  const play = useCallback(() => {
-    flushPendingSkip();
-
-    const needsRebuild =
-      !startedRef.current || atEnd || playbackError !== null;
-
-    if (needsRebuild) {
-      desiredPlayingRef.current = true;
-      const target = atEnd ? pendingIndexRef.current + 1 : pendingIndexRef.current;
-      replaceQueue(target, settingsRef.current, true);
-      return;
-    }
-
-    desiredPlayingRef.current = true;
-    setPlaybackError(null);
-    playlist.setActiveForLockScreen(true, metadataForSentence(currentSentence));
-    playlist.play();
-  }, [
-    atEnd,
-    currentSentence,
-    flushPendingSkip,
-    playbackError,
-    playlist,
-    replaceQueue,
-  ]);
-
-  const pause = useCallback(() => {
-    desiredPlayingRef.current = false;
-    flushPendingSkip();
-    playlist.pause();
-
-    // Pause the playlist at the beginning of the current sentence rather than
-    // mid-clip, so Play always restarts the sentence from its original audio.
-    const trackIndex = entriesRef.current.findIndex(
-      (entry) => entry.sentenceIndex === pendingIndexRef.current
-    );
-    if (trackIndex >= 0) {
-      playlist.skipTo(trackIndex);
-      void playlist.seekTo(0).catch(() => {});
-    }
-  }, [flushPendingSkip, playlist]);
-
-  const goTo = useCallback(
-    (target: number) => {
-      if (rebuildingRef.current || fetchingMoreRef.current) {
         return;
       }
 
-      const list = sentencesRef.current;
-      if (list.length === 0) {
-        return;
-      }
-
-      const nextIndex = clamp(target, 0, list.length - 1);
-      if (nextIndex === pendingIndexRef.current) {
-        return;
-      }
-
-      pendingIndexRef.current = nextIndex;
-      pendingNavigationRef.current = true;
-      setPendingIndex(nextIndex);
-      setIndex(nextIndex);
-
-      if (!startedRef.current) {
-        return;
-      }
-
-      if (playbackError !== null) {
-        desiredPlayingRef.current = true;
-        replaceQueue(nextIndex, settingsRef.current, true);
-        return;
-      }
-
-      if (skipTimerRef.current !== null) {
-        clearTimeout(skipTimerRef.current);
-      }
-
+      apply({ type: 'setTarget', sentenceIndex: target });
       skipTimerRef.current = setTimeout(() => {
         skipTimerRef.current = null;
-        if (rebuildingRef.current) {
-          return;
-        }
-
-        const trackIndex = entriesRef.current.findIndex(
-          (entry) => entry.sentenceIndex === nextIndex
-        );
-
-        if (trackIndex < 0) {
-          replaceQueue(nextIndex, settingsRef.current, desiredPlayingRef.current);
-          return;
-        }
-
-        playlist.skipTo(trackIndex);
-        if (desiredPlayingRef.current) {
-          playlist.play();
+        const latest = stateRef.current;
+        if (latest.plan?.sentenceStarts.has(target)) {
+          applyRef.current({
+            type: 'navigate',
+            sentenceIndex: target,
+            play: latest.intent === 'playing',
+          });
         }
       }, NAVIGATION_SETTLE_MS);
     },
-    [playbackError, playlist, replaceQueue, sentencesRef]
+    [apply, buildPlan, sentencesRef]
   );
 
-  const next = useCallback(
-    () => goTo(pendingIndexRef.current + 1),
-    [goTo]
-  );
-  const previous = useCallback(
-    () => goTo(pendingIndexRef.current - 1),
-    [goTo]
-  );
+  const play = useCallback(() => {
+    if (stateRef.current.fetchingMore) {
+      return;
+    }
 
-  const reset = useCallback(() => {
     if (skipTimerRef.current !== null) {
       clearTimeout(skipTimerRef.current);
       skipTimerRef.current = null;
     }
-    playlist.setActiveForLockScreen(false);
-    playlist.pause();
-    playlist.clear();
 
-    entriesRef.current = [];
-    setEntries([]);
-    pendingIndexRef.current = 0;
-    pendingNavigationRef.current = false;
-    setPendingIndex(null);
-    startedRef.current = false;
-    setStarted(false);
-    desiredPlayingRef.current = false;
-    rebuildingRef.current = false;
-    setPlaybackError(null);
-    setIndex(0);
-  }, [playlist]);
+    const current = stateRef.current;
+    const sentence = current.targetSentence ?? current.currentSentence;
 
-  const restart = useCallback(
-    (config: Settings) => {
-      if (!startedRef.current) {
+    if (
+      !current.plan ||
+      current.status === 'interrupted' ||
+      current.status === 'ended'
+    ) {
+      const list = sentencesRef.current;
+      if (list.length === 0) {
         return;
       }
-      replaceQueue(pendingIndexRef.current, config, desiredPlayingRef.current);
-    },
-    [replaceQueue]
-  );
-
-  const fetchMore = useCallback(async () => {
-    if (fetchingMoreRef.current) {
+      const start = clamp(
+        current.status === 'ended' ? sentence + 1 : sentence,
+        0,
+        list.length - 1
+      );
+      const plan = buildPlan(start);
+      if (plan) {
+        apply({ type: 'replan', plan, sentenceIndex: start, autoPlay: true });
+      }
       return;
     }
 
-    fetchingMoreRef.current = true;
-    setFetchingMore(true);
-    setPlaybackError(null);
+    apply({ type: 'play' });
+  }, [apply, buildPlan, sentencesRef]);
 
+  const pause = useCallback(() => {
+    if (stateRef.current.fetchingMore) {
+      return;
+    }
+    if (skipTimerRef.current !== null) {
+      clearTimeout(skipTimerRef.current);
+      skipTimerRef.current = null;
+    }
+    apply({ type: 'pause' });
+  }, [apply]);
+
+  const reset = useCallback(() => {
+    sessionRef.current++;
+    if (skipTimerRef.current !== null) {
+      clearTimeout(skipTimerRef.current);
+      skipTimerRef.current = null;
+    }
+    loadTokenRef.current++;
+    rebuildingRef.current = false;
+    apply({ type: 'reset' });
+  }, [apply]);
+
+  const restart = useCallback(
+    (config: Settings) => {
+      const current = stateRef.current;
+      if (!current.plan || current.fetchingMore) {
+        return;
+      }
+
+      if (skipTimerRef.current !== null) {
+        clearTimeout(skipTimerRef.current);
+        skipTimerRef.current = null;
+      }
+
+      const start = clamp(
+        current.targetSentence ?? current.currentSentence,
+        0,
+        sentencesRef.current.length - 1
+      );
+      const plan = buildPlan(start, config);
+      if (plan) {
+        apply({
+          type: 'replan',
+          plan,
+          sentenceIndex: start,
+          autoPlay: current.intent === 'playing',
+        });
+      }
+    },
+    [apply, buildPlan, sentencesRef]
+  );
+
+  const fetchMore = useCallback(async () => {
+    const current = stateRef.current;
+    if (current.fetchingMore) {
+      return;
+    }
+
+    const session = sessionRef.current;
     const before = sentencesRef.current.length;
-    const wasStarted = startedRef.current;
-    const shouldPlay = desiredPlayingRef.current;
+    const wasStarted = current.plan !== null;
+    const shouldPlay = current.intent === 'playing';
+
+    apply({ type: 'fetchingStarted' });
+    if (skipTimerRef.current !== null) {
+      clearTimeout(skipTimerRef.current);
+      skipTimerRef.current = null;
+    }
 
     try {
       await loadMore();
 
-      if (sentencesRef.current.length <= before) {
-        setPlaybackError('No new usable sentences were returned. Try again later.');
+      if (session !== sessionRef.current) {
+        return;
+      }
+
+      const after = sentencesRef.current.length;
+      if (after <= before) {
+        apply({
+          type: 'error',
+          message: 'No new usable sentences were returned. Try again later.',
+        });
         return;
       }
 
       if (!wasStarted) {
-        pendingIndexRef.current = before;
-        pendingNavigationRef.current = true;
-        setPendingIndex(before);
-        setIndex(before);
+        apply({ type: 'setTarget', sentenceIndex: before });
+        apply({ type: 'fetchingFinished' });
         return;
       }
 
-      replaceQueue(before, settingsRef.current, shouldPlay);
+      const plan = buildPlan(before);
+      if (!plan) {
+        apply({ type: 'error', message: 'Could not prepare more sentences.' });
+        return;
+      }
+
+      apply({
+        type: 'replan',
+        plan,
+        sentenceIndex: before,
+        autoPlay: shouldPlay,
+      });
+      apply({ type: 'fetchingFinished' });
     } catch (error) {
-      setPlaybackError(
-        error instanceof Error ? error.message : 'Could not load more sentences.'
-      );
-    } finally {
-      fetchingMoreRef.current = false;
-      setFetchingMore(false);
+      apply({
+        type: 'error',
+        message:
+          error instanceof Error ? error.message : 'Could not load more sentences.',
+      });
     }
-  }, [loadMore, replaceQueue, sentencesRef]);
-
-  // Keep the lock-screen title in sync with the current sentence.
-  useEffect(() => {
-    if (started) {
-      playlist.updateLockScreenMetadata(metadataForSentence(currentSentence));
-    }
-  }, [currentSentence, playlist, started]);
+  }, [apply, buildPlan, loadMore, sentencesRef]);
 
   useEffect(() => {
-    if (status.didJustFinish) {
-      playlist.setActiveForLockScreen(false);
+    if (!state.plan) {
+      return;
     }
-  }, [playlist, status.didJustFinish]);
+    const sentence = sentences[state.targetSentence ?? state.currentSentence];
+    playlist.updateLockScreenMetadata(metadataForSentence(sentence));
+  }, [
+    playlist,
+    sentences,
+    state.currentSentence,
+    state.plan,
+    state.targetSentence,
+  ]);
+
+  const currentIndex = state.targetSentence ?? state.currentSentence;
+  const currentSentence = sentences[currentIndex];
+  const playing = state.plan !== null && status.playing;
 
   return {
     currentIndex,
     currentSentence,
     playing,
-    fetchingMore,
-    playbackError,
+    fetchingMore: state.fetchingMore,
+    playbackError: state.error,
     play,
     pause,
-    next,
-    previous,
+    next: () => goTo(1),
+    previous: () => goTo(-1),
     reset,
     restart,
     fetchMore,
