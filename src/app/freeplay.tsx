@@ -4,7 +4,7 @@ import { AudioCredits } from '@/components/AudioCredits';
 import { Attribution } from '@/components/Attribution';
 import { Button } from '@/components/Button';
 import { IconButton } from '@/components/IconButton';
-import { LanguagePicker } from '@/components/LanguagePicker';
+import { LanguagePairSelectors } from '@/components/LanguagePairSelectors';
 import { Screen } from '@/components/Screen';
 import { useFreeplayPlaylist } from '@/hooks/useFreeplayPlaylist';
 import { useSentenceQueue } from '@/hooks/useSentenceQueue';
@@ -92,18 +92,12 @@ export default function FreeplayScreen() {
 
   return (
     <Screen>
-      <View style={styles.languageRow}>
-        <LanguagePicker
-          label="Practice"
-          value={settings.from}
-          onChange={(value) => changeLanguage('from', value)}
-        />
-        <LanguagePicker
-          label="Translate"
-          value={settings.to}
-          onChange={(value) => changeLanguage('to', value)}
-        />
-      </View>
+      <LanguagePairSelectors
+        from={settings.from}
+        to={settings.to}
+        onFromChange={(value) => changeLanguage('from', value)}
+        onToChange={(value) => changeLanguage('to', value)}
+      />
 
       <Text style={styles.tracker}>
         {fetchingMore
@@ -217,10 +211,6 @@ export default function FreeplayScreen() {
 }
 
 const styles = StyleSheet.create({
-  languageRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
   tracker: {
     fontSize: 13,
     color: '#666666',
