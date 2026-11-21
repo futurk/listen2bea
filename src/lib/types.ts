@@ -41,12 +41,19 @@ export interface SentenceSearchResponse {
 /** A translation whose audio is safe to play. */
 export interface PlayableTranslation extends Omit<Translation, 'audios'> {
   audios: Audio[];
+  /**
+   * ID of the first recording returned by the API, before license filtering.
+   * The static Tatoeba audio host only serves that recording.
+   */
+  primaryAudioId: number | null;
 }
 
 /** A sentence whose own audio and translations are safe to play. */
 export interface PlayableSentence extends Omit<Sentence, 'audios' | 'translations'> {
   audios: Audio[];
   translations: PlayableTranslation[];
+  /** @see PlayableTranslation.primaryAudioId */
+  primaryAudioId: number | null;
 }
 
 export interface SentencePage {

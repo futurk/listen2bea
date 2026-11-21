@@ -23,6 +23,7 @@ const sentence = (overrides: Partial<PlayableSentence> = {}): PlayableSentence =
   text: 'Hallo.',
   lang: 'deu',
   audios: [{ id: 1, author: 'a', license: 'CC BY 4.0' }],
+  primaryAudioId: 1,
   translations: [
     {
       id: 2,
@@ -30,6 +31,7 @@ const sentence = (overrides: Partial<PlayableSentence> = {}): PlayableSentence =
       lang: 'eng',
       is_direct: true,
       audios: [{ id: 2, author: 'b', license: 'CC BY 4.0' }],
+      primaryAudioId: 2,
     },
   ],
   ...overrides,
@@ -54,10 +56,37 @@ describe('buildPlaylistTracks', () => {
       'repeat',
       'pause',
     ]);
-    expect(uriOf(tracks[0].source)).toContain('/v1/audios/1/file');
-    expect(uriOf(tracks[2].source)).toContain('/v1/audios/2/file');
+    expect(uriOf(tracks[0].source)).toBe(
+      'https://audio.tatoeba.org/sentences/deu/1.mp3'
+    );
+    expect(uriOf(tracks[2].source)).toBe(
+      'https://audio.tatoeba.org/sentences/eng/2.mp3'
+    );
+    expect(uriOf(tracks[4].source)).toBe(
+      'https://audio.tatoeba.org/sentences/deu/1.mp3'
+    );
     expect(uriOf(tracks[1].source)).toBeTruthy();
     expect(tracks[1].source).toEqual(tracks[3].source);
+  });
+
+  it('falls back to the API file when the playable audio is not the primary recording', () => {
+    const tracks = buildPlaylistTracks(
+      [
+        sentence({
+          audios: [{ id: 5, author: 'a', license: 'CC BY 4.0' }],
+          primaryAudioId: 4,
+        }),
+      ],
+      0,
+      settings
+    );
+
+    expect(uriOf(tracks[0].source)).toBe(
+      'https://api.tatoeba.org/v1/audios/5/file'
+    );
+    expect(uriOf(tracks[4].source)).toBe(
+      'https://api.tatoeba.org/v1/audios/5/file'
+    );
   });
 
   it('passes every track as an AudioSource object with a uri', () => {
@@ -89,7 +118,14 @@ describe('buildPlaylistTracks', () => {
       [
         sentence({
           translations: [
-            { id: 3, text: 'Hi.', lang: 'eng', is_direct: true, audios: [] },
+            {
+              id: 3,
+              text: 'Hi.',
+              lang: 'eng',
+              is_direct: true,
+              audios: [],
+              primaryAudioId: null,
+            },
           ],
         }),
       ],

@@ -7,6 +7,7 @@ import {
   firstTranslationWithAudio,
   isReusableAudio,
   prepareSentences,
+  staticAudioFileUrl,
 } from '../tatoeba';
 import type { Sentence } from '../types';
 
@@ -89,6 +90,31 @@ describe('audio filtering', () => {
     expect(prepared.translations[0].audios).toEqual([]);
   });
 
+  it('remembers the primary recording before license filtering', () => {
+    const [prepared] = prepareSentences(
+      [
+        sentence({
+          audios: [usableAudio(11, ''), usableAudio(12)],
+          translations: [
+            {
+              id: 13,
+              text: 'Hi.',
+              lang: 'eng',
+              is_direct: true,
+              audios: [usableAudio(14), usableAudio(15, '')],
+            },
+          ],
+        }),
+      ],
+      false
+    );
+
+    expect(prepared.primaryAudioId).toBe(11);
+    expect(prepared.audios.map((audio) => audio.id)).toEqual([12]);
+    expect(prepared.translations[0].primaryAudioId).toBe(14);
+    expect(prepared.translations[0].audios.map((audio) => audio.id)).toEqual([14]);
+  });
+
   it('drops sentences without a usable original recording', () => {
     const result = prepareSentences(
       [sentence({ audios: [usableAudio(1, '')] })],
@@ -138,6 +164,12 @@ describe('audioFileUrl', () => {
   it('uses the working plural audios endpoint', () => {
     expect(audioFileUrl({ id: 695154 })).toBe(
       'https://api.tatoeba.org/v1/audios/695154/file'
+    );
+  });
+
+  it('builds the static sentence audio URL', () => {
+    expect(staticAudioFileUrl('deu', 2525369)).toBe(
+      'https://audio.tatoeba.org/sentences/deu/2525369.mp3'
     );
   });
 });

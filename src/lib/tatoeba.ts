@@ -70,12 +70,14 @@ export function toPlayableSentence(sentence: Sentence): PlayableSentence {
     (translation) => ({
       ...translation,
       audios: reusableAudios(translation.audios),
+      primaryAudioId: translation.audios?.[0]?.id ?? null,
     })
   );
 
   return {
     ...sentence,
     audios: reusableAudios(sentence.audios),
+    primaryAudioId: sentence.audios?.[0]?.id ?? null,
     translations,
   };
 }
@@ -144,9 +146,19 @@ export async function fetchSentencePage(
   return page;
 }
 
+export const TATOEBA_AUDIO_BASE = 'https://audio.tatoeba.org';
+
 /**
- * The API's own `download_url` points at `/v1/audio/{id}/file`, which returns
- * 404. The working endpoint uses the plural `audios`.
+ * Static audio host. It serves the first recording of a sentence and responds
+ * in milliseconds, while the API file endpoint can take seconds.
+ */
+export const staticAudioFileUrl = (lang: string, sentenceId: number): string =>
+  `${TATOEBA_AUDIO_BASE}/sentences/${lang}/${sentenceId}.mp3`;
+
+/**
+ * Fallback for sentences whose playable recording is not the first one. The
+ * API's own `download_url` points at `/v1/audio/{id}/file`, which returns 404.
+ * The working endpoint uses the plural `audios`.
  */
 export const audioFileUrl = (audio: Pick<Audio, 'id'>): string =>
   `${TATOEBA_API_BASE}/v1/audios/${audio.id}/file`;
