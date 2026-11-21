@@ -1,7 +1,10 @@
 import { describe, expect, it } from '@jest/globals';
 import {
+  buildPlaylistPlan,
   buildPlaylistTracks,
+  findSentenceStart,
   metadataForSentence,
+  sentenceAtTrack,
   SILENCE_TRACKS,
   silenceFor,
 } from '../playlist';
@@ -111,6 +114,35 @@ describe('buildPlaylistTracks', () => {
 
     expect(tracks[0].entry.sentenceIndex).toBe(7);
     expect(tracks[6].entry.sentenceIndex).toBe(8);
+  });
+});
+
+describe('buildPlaylistPlan', () => {
+  it('maps sentence starts and final indexes', () => {
+    const plan = buildPlaylistPlan(
+      [sentence(), sentence({ id: 4, text: 'Tschüss.' })],
+      0,
+      settings
+    );
+
+    expect(plan.sentenceStarts.get(0)).toBe(0);
+    expect(plan.sentenceStarts.get(1)).toBe(6);
+    expect(plan.lastSentenceIndex).toBe(1);
+    expect(plan.lastTrackIndex).toBe(11);
+    expect(sentenceAtTrack(plan, 6)).toBe(1);
+    expect(findSentenceStart(plan, 1)).toBe(6);
+  });
+
+  it('can start a plan from a later sentence', () => {
+    const plan = buildPlaylistPlan(
+      [sentence(), sentence({ id: 4, text: 'Tschüss.' })],
+      1,
+      settings
+    );
+
+    expect(plan.sentenceStarts.has(0)).toBe(false);
+    expect(plan.sentenceStarts.get(1)).toBe(0);
+    expect(plan.lastSentenceIndex).toBe(1);
   });
 });
 
