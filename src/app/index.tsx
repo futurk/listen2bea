@@ -15,12 +15,14 @@ export default function HomeScreen() {
 
         <Button
           label="Freeplay"
+          icon="headset"
           variant="primary"
           onPress={() => router.push('/freeplay')}
           style={styles.button}
         />
         <Button
           label="Dictation"
+          icon="pencil"
           onPress={() => router.push('/dictation')}
           style={styles.button}
         />

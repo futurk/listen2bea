@@ -11,6 +11,7 @@ import {
 import { AudioCredits } from '@/components/AudioCredits';
 import { Attribution } from '@/components/Attribution';
 import { Button } from '@/components/Button';
+import { IconButton } from '@/components/IconButton';
 import { LanguagePicker } from '@/components/LanguagePicker';
 import { Screen } from '@/components/Screen';
 import { isAbortError, useClipPlayer } from '@/hooks/useClipPlayer';
@@ -132,7 +133,12 @@ export default function DictationScreen() {
         />
       </View>
 
-      <Button label={loading ? 'Loading…' : 'Load sentences'} onPress={handleLoad} disabled={loading} />
+      <Button
+        label={loading ? 'Loading…' : 'Load sentences'}
+        icon="cloud-download-outline"
+        onPress={handleLoad}
+        disabled={loading}
+      />
 
       <Text style={styles.tracker}>
         {sentences.length > 0 ? `${index + 1} / ${sentences.length}` : ' '}
@@ -146,18 +152,22 @@ export default function DictationScreen() {
       {current ? (
         <>
           <View style={styles.audioRow}>
-            <Button
-              label="Play audio"
+            <IconButton
+              name="play"
+              accessibilityLabel="Play audio"
               onPress={handlePlay}
               disabled={!originalAudio}
               variant="primary"
-              style={styles.audioButton}
+              size={24}
             />
-            <Button
-              label={showTranslation ? 'Hide translation' : 'Show translation'}
+            <IconButton
+              name={showTranslation ? 'eye-off-outline' : 'eye-outline'}
+              accessibilityLabel={
+                showTranslation ? 'Hide translation' : 'Show translation'
+              }
               onPress={() => setShowTranslation((value) => !value)}
               disabled={!translation}
-              style={styles.audioButton}
+              active={showTranslation}
             />
           </View>
 
@@ -184,6 +194,7 @@ export default function DictationScreen() {
           {!checked ? (
             <Button
               label="Check"
+              icon="checkmark"
               onPress={() => setChecked(true)}
               variant="primary"
               disabled={answer.trim().length === 0}
@@ -210,17 +221,17 @@ export default function DictationScreen() {
           )}
 
           <View style={styles.navRow}>
-            <Button
-              label="Prev"
+            <IconButton
+              name="chevron-back"
+              accessibilityLabel="Previous sentence"
               onPress={() => handleJump(-1)}
               disabled={index <= 0}
-              style={styles.navButton}
             />
-            <Button
-              label="Next"
+            <IconButton
+              name="chevron-forward"
+              accessibilityLabel="Next sentence"
               onPress={handleNext}
               disabled={index >= sentences.length - 1}
-              style={styles.navButton}
             />
           </View>
 
@@ -258,10 +269,9 @@ const styles = StyleSheet.create({
   },
   audioRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  audioButton: {
-    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 24,
   },
   translation: {
     fontSize: 16,
@@ -303,10 +313,9 @@ const styles = StyleSheet.create({
   },
   navRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  navButton: {
-    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 24,
   },
   empty: {
     fontSize: 15,

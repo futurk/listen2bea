@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { AudioCredits } from '@/components/AudioCredits';
 import { Attribution } from '@/components/Attribution';
 import { Button } from '@/components/Button';
+import { IconButton } from '@/components/IconButton';
 import { LanguagePicker } from '@/components/LanguagePicker';
 import { Screen } from '@/components/Screen';
 import { useFreeplayPlaylist } from '@/hooks/useFreeplayPlaylist';
@@ -128,56 +129,67 @@ export default function FreeplayScreen() {
       </View>
 
       <View style={styles.controlRow}>
-        <Button
-          label="Prev"
+        <IconButton
+          name="chevron-back"
+          accessibilityLabel="Previous sentence"
           onPress={() => changeIndex(-1)}
           disabled={fetchingMore || !currentSentence || currentIndex <= 0}
-          style={styles.control}
         />
-        <Button
-          label={fetchingMore ? 'Loading…' : playing ? 'Pause' : 'Play'}
+        <IconButton
+          name={fetchingMore ? 'hourglass-outline' : playing ? 'pause' : 'play'}
+          accessibilityLabel={
+            fetchingMore ? 'Loading more sentences' : playing ? 'Pause' : 'Play'
+          }
           onPress={togglePlayback}
           disabled={fetchingMore || !currentSentence}
           variant="primary"
-          style={styles.control}
+          size={24}
         />
-        <Button
-          label="Next"
+        <IconButton
+          name="chevron-forward"
+          accessibilityLabel="Next sentence"
           onPress={() => changeIndex(1)}
           disabled={
             fetchingMore ||
             !currentSentence ||
             currentIndex >= sentences.length - 1
           }
-          style={styles.control}
         />
       </View>
 
       <View style={styles.optionRow}>
-        <Button
-          label={showTranslation ? 'Hide translation' : 'Show translation'}
+        <IconButton
+          name={showTranslation ? 'eye-off-outline' : 'eye-outline'}
+          accessibilityLabel={
+            showTranslation ? 'Hide translation' : 'Show translation'
+          }
           onPress={() => setShowTranslation((value) => !value)}
           disabled={!translation}
-          style={styles.option}
+          active={showTranslation}
         />
-        <Button
-          label={`Repeat original: ${settings.repeatOriginal ? 'On' : 'Off'}`}
+        <IconButton
+          name="repeat"
+          accessibilityLabel={`Repeat original ${settings.repeatOriginal ? 'on' : 'off'}`}
           onPress={toggleRepeat}
-          style={styles.option}
+          active={settings.repeatOriginal}
         />
       </View>
 
       <View style={styles.pauseRow}>
         <Text style={styles.pauseLabel}>Pause: {settings.pauseSeconds}s</Text>
-        <Button
-          label="-"
+        <IconButton
+          name="remove"
+          accessibilityLabel="Decrease pause length"
           onPress={() => changePause(Math.max(1, settings.pauseSeconds - 1))}
           disabled={settings.pauseSeconds <= 1}
+          size={20}
         />
-        <Button
-          label="+"
+        <IconButton
+          name="add"
+          accessibilityLabel="Increase pause length"
           onPress={() => changePause(Math.min(5, settings.pauseSeconds + 1))}
           disabled={settings.pauseSeconds >= 5}
+          size={20}
         />
       </View>
 
@@ -190,6 +202,7 @@ export default function FreeplayScreen() {
                 ? 'Fetch more sentences'
                 : 'No more sentences'
           }
+          icon={hasMore ? 'add-circle-outline' : 'checkmark-circle-outline'}
           onPress={fetchMore}
           disabled={fetchingMore || !hasMore}
         />
@@ -241,17 +254,15 @@ const styles = StyleSheet.create({
   },
   controlRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  control: {
-    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 24,
   },
   optionRow: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  option: {
-    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 24,
   },
   pauseRow: {
     flexDirection: 'row',
