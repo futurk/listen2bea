@@ -32,6 +32,13 @@ const sentence = (overrides: Partial<PlayableSentence> = {}): PlayableSentence =
   ...overrides,
 });
 
+const uriOf = (source: unknown): string | undefined => {
+  if (source && typeof source === 'object' && 'uri' in source) {
+    return (source as { uri?: string }).uri;
+  }
+  return undefined;
+};
+
 describe('buildPlaylistTracks', () => {
   it('builds original, pause, translation, pause, repeat, pause', () => {
     const tracks = buildPlaylistTracks([sentence()], 0, settings);
@@ -44,10 +51,20 @@ describe('buildPlaylistTracks', () => {
       'repeat',
       'pause',
     ]);
-    expect(tracks[0].source).toContain('/v1/audios/1/file');
-    expect(tracks[2].source).toContain('/v1/audios/2/file');
-    expect(tracks[1].source).toBe(SILENCE_TRACKS[1]);
-    expect(tracks[3].source).toBe(SILENCE_TRACKS[1]);
+    expect(uriOf(tracks[0].source)).toContain('/v1/audios/1/file');
+    expect(uriOf(tracks[2].source)).toContain('/v1/audios/2/file');
+    expect(uriOf(tracks[1].source)).toBeTruthy();
+    expect(tracks[1].source).toEqual(tracks[3].source);
+  });
+
+  it('passes every track as an AudioSource object with a uri', () => {
+    const tracks = buildPlaylistTracks([sentence()], 0, settings);
+
+    for (const track of tracks) {
+      expect(typeof track.source).toBe('object');
+      expect(track.source).not.toBeNull();
+      expect(uriOf(track.source)).toBeTruthy();
+    }
   });
 
   it('omits the repeat when disabled', () => {

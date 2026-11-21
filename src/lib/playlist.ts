@@ -1,4 +1,5 @@
 import type { AudioSource } from 'expo-audio';
+import { Asset } from 'expo-asset';
 import type { Settings } from './storage';
 import { audioFileUrl, firstTranslationWithAudio } from './tatoeba';
 import type { PlayableSentence } from './types';
@@ -16,13 +17,25 @@ export interface BuiltTrack {
 }
 
 /** Short silent MP3s used to insert pauses into the native playlist. */
-export const SILENCE_TRACKS: AudioSource[] = [
+export const SILENCE_TRACKS: number[] = [
   require('../../assets/audio/silence-1s.mp3'),
   require('../../assets/audio/silence-2s.mp3'),
   require('../../assets/audio/silence-3s.mp3'),
   require('../../assets/audio/silence-4s.mp3'),
   require('../../assets/audio/silence-5s.mp3'),
 ];
+
+/**
+ * Native AudioPlaylist.add() expects an AudioSource record, not a string or
+ * asset module ID, and unlike AudioPlayer.replace() it is not normalized by
+ * expo-audio's JS wrapper.
+ */
+const remoteSource = (url: string): AudioSource => ({ uri: url });
+
+const silenceSource = (moduleId: number): AudioSource => {
+  const asset = Asset.fromModule(moduleId);
+  return { uri: asset.localUri ?? asset.uri, name: asset.name };
+};
 
 const BASE_METADATA = {
   title: 'Listen2Bea',
@@ -42,7 +55,7 @@ export const metadataForSentence = (sentence?: PlayableSentence) => {
   return { ...BASE_METADATA, title: text };
 };
 
-export const silenceFor = (seconds: number): AudioSource => {
+export const silenceFor = (seconds: number): number => {
   const index = clamp(Math.round(seconds), 1, SILENCE_TRACKS.length) - 1;
   return SILENCE_TRACKS[index];
 };
@@ -57,7 +70,7 @@ export const buildPlaylistTracks = (
   settings: Settings
 ): BuiltTrack[] => {
   const tracks: BuiltTrack[] = [];
-  const pauseTrack = silenceFor(settings.pauseSeconds);
+  const pauseTrack = silenceSource(silenceFor(settings.pauseSeconds));
 
   sentences.forEach((sentence, offset) => {
     const sentenceIndex = startIndex + offset;
@@ -68,16 +81,16 @@ export const buildPlaylistTracks = (
       tracks.push({ source, entry: { sentenceIndex, kind } });
     };
 
-    push(audioFileUrl(original), 'original');
+    push(remoteSource(audioFileUrl(original)), 'original');
     push(pauseTrack, 'pause');
 
     if (translation) {
-      push(audioFileUrl(translation), 'translation');
+      push(remoteSource(audioFileUrl(translation)), 'translation');
       push(pauseTrack, 'pause');
     }
 
     if (settings.repeatOriginal) {
-      push(audioFileUrl(original), 'repeat');
+      push(remoteSource(audioFileUrl(original)), 'repeat');
       push(pauseTrack, 'pause');
     }
   });
