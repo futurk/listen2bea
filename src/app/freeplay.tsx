@@ -22,6 +22,7 @@ export default function FreeplayScreen() {
     currentIndex,
     currentSentence,
     playing,
+    playbackError,
     play,
     pause,
     next,
@@ -102,6 +103,7 @@ export default function FreeplayScreen() {
       </Text>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {playbackError ? <Text style={styles.error}>{playbackError}</Text> : null}
 
       <View style={styles.sentenceBox}>
         {loading && sentences.length === 0 ? <ActivityIndicator /> : null}

@@ -38,21 +38,44 @@ export function useFreeplayPlaylist({
   const [entries, setEntries] = useState<QueueEntry[]>([]);
   const [index, setIndex] = useState(0);
   const [started, setStarted] = useState(false);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
 
   const entriesRef = useRef<QueueEntry[]>([]);
   const startedRef = useRef(false);
   const builtCountRef = useRef(0);
   const settingsRef = useRef(settings);
   const loadingMoreRef = useRef(false);
+  const pausedByUserRef = useRef(false);
+  const interruptedRef = useRef(false);
 
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
 
+  useEffect(() => {
+    const subscription = playlist.addListener('playlistStatusUpdate', (raw) => {
+      const error = (raw as unknown as { error?: unknown }).error;
+      if (!error) {
+        return;
+      }
+      interruptedRef.current = true;
+      pausedByUserRef.current = false;
+      setPlaybackError('Playback interrupted. Press Play to retry.');
+      playlist.setActiveForLockScreen(false);
+    });
+
+    return () => subscription.remove();
+  }, [playlist]);
+
   const activeEntry = started ? entries[status.currentIndex] : undefined;
   const currentIndex = activeEntry?.sentenceIndex ?? index;
   const currentSentence = sentences[currentIndex];
   const playing = started && status.playing;
+  const atEnd =
+    started &&
+    entries.length > 0 &&
+    status.currentIndex >= entries.length - 1 &&
+    !status.playing;
 
   const replaceQueue = useCallback(
     (sentenceIndex: number, config: Settings, autoPlay: boolean) => {
@@ -74,6 +97,9 @@ export function useFreeplayPlaylist({
       startedRef.current = true;
       setStarted(true);
       setIndex(start);
+      pausedByUserRef.current = !autoPlay;
+      interruptedRef.current = false;
+      setPlaybackError(null);
 
       if (supportsPlaylistLockScreen) {
         playlist.setActiveForLockScreen(true, metadataForSentence(list[start]));
@@ -87,17 +113,37 @@ export function useFreeplayPlaylist({
   );
 
   const play = useCallback(() => {
-    if (!startedRef.current || status.didJustFinish) {
+    const needsRebuild =
+      !startedRef.current ||
+      atEnd ||
+      interruptedRef.current ||
+      playbackError !== null ||
+      (!status.playing && !pausedByUserRef.current);
+
+    if (needsRebuild) {
       replaceQueue(currentIndex, settingsRef.current, true);
       return;
     }
+
+    pausedByUserRef.current = false;
+    interruptedRef.current = false;
+    setPlaybackError(null);
     if (supportsPlaylistLockScreen) {
       playlist.setActiveForLockScreen(true, metadataForSentence(currentSentence));
     }
     playlist.play();
-  }, [currentIndex, currentSentence, playlist, replaceQueue, status.didJustFinish]);
+  }, [
+    atEnd,
+    currentIndex,
+    currentSentence,
+    playbackError,
+    playlist,
+    replaceQueue,
+    status.playing,
+  ]);
 
   const pause = useCallback(() => {
+    pausedByUserRef.current = true;
     playlist.pause();
   }, [playlist]);
 
@@ -114,6 +160,11 @@ export function useFreeplayPlaylist({
         return;
       }
 
+      if (interruptedRef.current || playbackError !== null) {
+        replaceQueue(nextIndex, settingsRef.current, true);
+        return;
+      }
+
       const trackIndex = entriesRef.current.findIndex(
         (entry) => entry.sentenceIndex === nextIndex
       );
@@ -124,7 +175,7 @@ export function useFreeplayPlaylist({
         replaceQueue(nextIndex, settingsRef.current, status.playing);
       }
     },
-    [playlist, replaceQueue, sentencesRef, status.playing]
+    [playbackError, playlist, replaceQueue, sentencesRef, status.playing]
   );
 
   const next = useCallback(() => goTo(currentIndex + 1), [currentIndex, goTo]);
@@ -140,6 +191,9 @@ export function useFreeplayPlaylist({
     startedRef.current = false;
     setStarted(false);
     builtCountRef.current = 0;
+    pausedByUserRef.current = false;
+    interruptedRef.current = false;
+    setPlaybackError(null);
     setIndex(0);
   }, [playlist]);
 
@@ -210,6 +264,7 @@ export function useFreeplayPlaylist({
     currentIndex,
     currentSentence,
     playing,
+    playbackError,
     play,
     pause,
     next,
