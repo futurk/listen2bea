@@ -1,4 +1,5 @@
 import { Linking, StyleSheet, Text } from 'react-native';
+import { useAppTheme } from '@/lib/theme';
 import type { Audio } from '@/lib/types';
 
 interface AudioCreditsProps {
@@ -10,9 +11,11 @@ const profileUrl = (author: string): string =>
   `https://tatoeba.org/en/user/profile/${encodeURIComponent(author)}`;
 
 function AudioLink({ audio }: { audio: Audio }) {
+  const theme = useAppTheme();
+
   return (
     <Text
-      style={styles.link}
+      style={[styles.link, { color: theme.accent }]}
       accessibilityRole="link"
       onPress={() => Linking.openURL(audio.attribution_url ?? profileUrl(audio.author))}
     >
@@ -22,12 +25,14 @@ function AudioLink({ audio }: { audio: Audio }) {
 }
 
 export function AudioCredits({ original, translation }: AudioCreditsProps) {
+  const theme = useAppTheme();
+
   if (!original && !translation) {
     return null;
   }
 
   return (
-    <Text style={styles.text}>
+    <Text style={[styles.text, { color: theme.textMuted }]}>
       Audio:{' '}
       {original ? <AudioLink audio={original} /> : null}
       {original && translation ? ' / ' : null}
@@ -39,7 +44,6 @@ export function AudioCredits({ original, translation }: AudioCreditsProps) {
 const styles = StyleSheet.create({
   text: {
     fontSize: 12,
-    color: '#666666',
   },
   link: {
     textDecorationLine: 'underline',

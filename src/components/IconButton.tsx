@@ -11,6 +11,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import type { IconName } from './Button';
+import { useAppTheme } from '@/lib/theme';
 
 interface IconButtonProps {
   name: IconName;
@@ -100,14 +101,27 @@ export function IconButton({
     onPress?.(event);
   };
 
+  const theme = useAppTheme();
   const foreground =
-    variant === 'primary' ? '#ffffff' : active ? '#1a6ed8' : '#111111';
+    variant === 'primary'
+      ? theme.primaryText
+      : active
+        ? theme.accent
+        : theme.text;
 
   return (
     <View style={[styles.wrapper, style]}>
       {tooltip && tooltipVisible ? (
-        <View style={styles.tooltip} pointerEvents="none">
-          <Text style={styles.tooltipText}>{tooltip}</Text>
+        <View
+          style={[
+            styles.tooltip,
+            { backgroundColor: theme.tooltipBackground },
+          ]}
+          pointerEvents="none"
+        >
+          <Text style={[styles.tooltipText, { color: theme.tooltipText }]}>
+            {tooltip}
+          </Text>
         </View>
       ) : null}
 
@@ -125,8 +139,14 @@ export function IconButton({
         delayLongPress={400}
         style={({ pressed }) => [
           styles.base,
-          variant === 'primary' && styles.primary,
-          active && styles.active,
+          {
+            borderColor: active ? theme.accent : theme.border,
+            backgroundColor: active ? theme.accentSoft : theme.surface,
+          },
+          variant === 'primary' && {
+            backgroundColor: theme.primary,
+            borderColor: theme.primary,
+          },
           pressed && styles.pressed,
           disabled && styles.disabled,
         ]}
@@ -147,19 +167,9 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderWidth: 1,
-    borderColor: '#111111',
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
-  },
-  primary: {
-    backgroundColor: '#111111',
-    borderColor: '#111111',
-  },
-  active: {
-    backgroundColor: '#e8f0fe',
-    borderColor: '#1a6ed8',
   },
   pressed: {
     opacity: 0.6,
@@ -175,12 +185,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 6,
-    backgroundColor: '#111111',
     zIndex: 20,
     elevation: 8,
   },
   tooltipText: {
-    color: '#ffffff',
     fontSize: 12,
     lineHeight: 16,
     textAlign: 'center',

@@ -3,15 +3,19 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Attribution } from '@/components/Attribution';
 import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
+import { useAppTheme } from '@/lib/theme';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const theme = useAppTheme();
 
   return (
     <Screen>
       <View style={styles.main}>
-        <Text style={styles.title}>Listen2Bea</Text>
-        <Text style={styles.subtitle}>Practice listening with Tatoeba sentences.</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Listen2Bea</Text>
+        <Text style={[styles.subtitle, { color: theme.textMuted }]}>
+          Practice listening with Tatoeba sentences.
+        </Text>
 
         <Button
           label="Freeplay"
@@ -42,11 +46,9 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '600',
-    color: '#111111',
   },
   subtitle: {
     fontSize: 15,
-    color: '#555555',
     marginBottom: 12,
   },
   button: {

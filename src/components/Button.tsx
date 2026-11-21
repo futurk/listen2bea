@@ -9,6 +9,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { useAppTheme } from '@/lib/theme';
 
 export type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -29,7 +30,9 @@ export function Button({
   variant = 'secondary',
   style,
 }: ButtonProps) {
-  const foreground = variant === 'primary' ? '#ffffff' : '#111111';
+  const theme = useAppTheme();
+  const primary = variant === 'primary';
+  const foreground = primary ? theme.primaryText : theme.text;
 
   return (
     <Pressable
@@ -40,7 +43,10 @@ export function Button({
       onPress={onPress}
       style={({ pressed }) => [
         styles.base,
-        variant === 'primary' && styles.primary,
+        {
+          borderColor: primary ? theme.primary : theme.border,
+          backgroundColor: primary ? theme.primary : theme.surface,
+        },
         pressed && styles.pressed,
         disabled && styles.disabled,
         style,
@@ -57,16 +63,11 @@ export function Button({
 const styles = StyleSheet.create({
   base: {
     borderWidth: 1,
-    borderColor: '#111111',
     borderRadius: 6,
     paddingHorizontal: 16,
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
-  },
-  primary: {
-    backgroundColor: '#111111',
   },
   pressed: {
     opacity: 0.6,

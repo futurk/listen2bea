@@ -1,10 +1,16 @@
 import type { PropsWithChildren } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAppTheme } from '@/lib/theme';
 
 export function Screen({ children }: PropsWithChildren) {
+  const theme = useAppTheme();
+
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom', 'left', 'right']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: theme.background }]}
+      edges={['bottom', 'left', 'right']}
+    >
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
@@ -18,7 +24,6 @@ export function Screen({ children }: PropsWithChildren) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#ffffff',
   },
   content: {
     flexGrow: 1,

@@ -11,9 +11,11 @@ import { useSentenceQueue } from '@/hooks/useSentenceQueue';
 import { useSettings } from '@/hooks/useSettings';
 import type { LanguageCode } from '@/lib/languages';
 import { firstTranslationWithAudio } from '@/lib/tatoeba';
+import { useAppTheme } from '@/lib/theme';
 
 export default function FreeplayScreen() {
   const { settings, update } = useSettings();
+  const theme = useAppTheme();
   const { sentences, sentencesRef, loading, error, hasMore, loadMore } =
     useSentenceQueue({
       from: settings.from,
@@ -99,7 +101,7 @@ export default function FreeplayScreen() {
         onToChange={(value) => changeLanguage('to', value)}
       />
 
-      <Text style={styles.tracker}>
+      <Text style={[styles.tracker, { color: theme.textMuted }]}>
         {fetchingMore
           ? 'Loading more…'
           : loading
@@ -109,16 +111,34 @@ export default function FreeplayScreen() {
               : ' '}
       </Text>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {playbackError ? <Text style={styles.error}>{playbackError}</Text> : null}
+      {error ? (
+        <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>
+      ) : null}
+      {playbackError ? (
+        <Text style={[styles.error, { color: theme.danger }]}>{playbackError}</Text>
+      ) : null}
 
-      <View style={styles.sentenceBox}>
-        {loading && sentences.length === 0 ? <ActivityIndicator /> : null}
+      <View
+        style={[
+          styles.sentenceBox,
+          {
+            borderColor: theme.subtleBorder,
+            backgroundColor: theme.surface,
+          },
+        ]}
+      >
+        {loading && sentences.length === 0 ? (
+          <ActivityIndicator color={theme.accent} />
+        ) : null}
         {currentSentence ? (
-          <Text style={styles.sentence}>{currentSentence.text}</Text>
+          <Text style={[styles.sentence, { color: theme.text }]}>
+            {currentSentence.text}
+          </Text>
         ) : null}
         {currentSentence && showTranslation && translation ? (
-          <Text style={styles.translation}>{translation.text}</Text>
+          <Text style={[styles.translation, { color: theme.textMuted }]}>
+            {translation.text}
+          </Text>
         ) : null}
       </View>
 
@@ -172,7 +192,9 @@ export default function FreeplayScreen() {
       </View>
 
       <View style={styles.pauseRow}>
-        <Text style={styles.pauseLabel}>Pause: {settings.pauseSeconds}s</Text>
+        <Text style={[styles.pauseLabel, { color: theme.text }]}>
+          Pause: {settings.pauseSeconds}s
+        </Text>
         <IconButton
           name="remove"
           accessibilityLabel="Decrease pause length"
@@ -213,19 +235,16 @@ export default function FreeplayScreen() {
 const styles = StyleSheet.create({
   tracker: {
     fontSize: 13,
-    color: '#666666',
     textAlign: 'center',
     minHeight: 18,
   },
   error: {
     fontSize: 14,
-    color: '#b00020',
     textAlign: 'center',
   },
   sentenceBox: {
     minHeight: 140,
     borderWidth: 1,
-    borderColor: '#dddddd',
     borderRadius: 6,
     padding: 16,
     justifyContent: 'center',
@@ -236,13 +255,11 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 30,
     textAlign: 'center',
-    color: '#111111',
   },
   translation: {
     fontSize: 16,
     lineHeight: 24,
     textAlign: 'center',
-    color: '#555555',
   },
   controlRow: {
     flexDirection: 'row',
@@ -264,6 +281,5 @@ const styles = StyleSheet.create({
   },
   pauseLabel: {
     fontSize: 15,
-    color: '#111111',
   },
 });

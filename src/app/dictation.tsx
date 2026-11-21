@@ -19,9 +19,11 @@ import { useSentenceQueue } from '@/hooks/useSentenceQueue';
 import { useSettings } from '@/hooks/useSettings';
 import type { LanguageCode } from '@/lib/languages';
 import { audioFileUrl } from '@/lib/tatoeba';
+import { useAppTheme } from '@/lib/theme';
 
 export default function DictationScreen() {
   const { settings, update } = useSettings();
+  const theme = useAppTheme();
   const { sentences, loading, error, load, reset } = useSentenceQueue({
     from: settings.from,
     to: settings.to,
@@ -134,14 +136,20 @@ export default function DictationScreen() {
         disabled={loading}
       />
 
-      <Text style={styles.tracker}>
+      <Text style={[styles.tracker, { color: theme.textMuted }]}>
         {sentences.length > 0 ? `${index + 1} / ${sentences.length}` : ' '}
       </Text>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {message ? <Text style={styles.notice}>{message}</Text> : null}
+      {error ? (
+        <Text style={[styles.error, { color: theme.danger }]}>{error}</Text>
+      ) : null}
+      {message ? (
+        <Text style={[styles.notice, { color: theme.textMuted }]}>{message}</Text>
+      ) : null}
 
-      {loading && sentences.length === 0 ? <ActivityIndicator /> : null}
+      {loading && sentences.length === 0 ? (
+        <ActivityIndicator color={theme.accent} />
+      ) : null}
 
       {current ? (
         <>
@@ -169,17 +177,26 @@ export default function DictationScreen() {
           </View>
 
           {showTranslation && translation ? (
-            <Text style={styles.translation}>{translation.text}</Text>
+            <Text style={[styles.translation, { color: theme.textMuted }]}>
+              {translation.text}
+            </Text>
           ) : null}
 
           <TextInput
             ref={inputRef}
-            style={styles.input}
+            style={[
+              styles.input,
+              {
+                borderColor: theme.border,
+                color: theme.text,
+                backgroundColor: theme.inputBackground,
+              },
+            ]}
             value={answer}
             onChangeText={setAnswer}
             editable={!checked}
             placeholder="Type the sentence you hear"
-            placeholderTextColor="#999999"
+            placeholderTextColor={theme.textMuted}
             autoCorrect={false}
             autoCapitalize="none"
             autoComplete="off"
@@ -198,21 +215,27 @@ export default function DictationScreen() {
             />
           ) : (
             <View style={styles.result}>
-              <Text style={styles.resultLabel}>
+              <Text style={[styles.resultLabel, { color: theme.text }]}>
                 {isPerfect ? 'Correct.' : 'Expected:'}
               </Text>
-              <Text style={styles.expected}>
+              <Text style={[styles.expected, { color: theme.text }]}>
                 {expectedParts.map((part, partIndex) => (
                   <Text
                     key={`${partIndex}-${part.value}`}
-                    style={part.added ? styles.missing : undefined}
+                    style={
+                      part.added
+                        ? { color: theme.success, fontWeight: '600' }
+                        : undefined
+                    }
                   >
                     {part.value}
                   </Text>
                 ))}
               </Text>
               {extraText ? (
-                <Text style={styles.extra}>Extra words: {extraText}</Text>
+                <Text style={[styles.extra, { color: theme.danger }]}>
+                  Extra words: {extraText}
+                </Text>
               ) : null}
             </View>
           )}
@@ -235,7 +258,9 @@ export default function DictationScreen() {
           <AudioCredits original={originalAudio} translation={translation?.audios[0]} />
         </>
       ) : (
-        <Text style={styles.empty}>Press “Load sentences” to start.</Text>
+        <Text style={[styles.empty, { color: theme.textMuted }]}>
+          Press “Load sentences” to start.
+        </Text>
       )}
 
       <Attribution />
@@ -246,18 +271,15 @@ export default function DictationScreen() {
 const styles = StyleSheet.create({
   tracker: {
     fontSize: 13,
-    color: '#666666',
     textAlign: 'center',
     minHeight: 18,
   },
   error: {
     fontSize: 14,
-    color: '#b00020',
     textAlign: 'center',
   },
   notice: {
     fontSize: 14,
-    color: '#666666',
     textAlign: 'center',
   },
   audioRow: {
@@ -269,19 +291,16 @@ const styles = StyleSheet.create({
   translation: {
     fontSize: 16,
     lineHeight: 24,
-    color: '#555555',
     textAlign: 'center',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#111111',
     borderRadius: 6,
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 16,
     minHeight: 96,
     textAlignVertical: 'top',
-    color: '#111111',
   },
   result: {
     gap: 8,
@@ -289,20 +308,13 @@ const styles = StyleSheet.create({
   resultLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#111111',
   },
   expected: {
     fontSize: 16,
     lineHeight: 24,
-    color: '#111111',
-  },
-  missing: {
-    color: '#0a7a2f',
-    fontWeight: '600',
   },
   extra: {
     fontSize: 14,
-    color: '#b00020',
   },
   navRow: {
     flexDirection: 'row',
@@ -312,7 +324,6 @@ const styles = StyleSheet.create({
   },
   empty: {
     fontSize: 15,
-    color: '#666666',
     textAlign: 'center',
   },
 });

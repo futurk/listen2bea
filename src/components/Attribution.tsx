@@ -1,11 +1,14 @@
 import { Linking, StyleSheet, Text } from 'react-native';
+import { useAppTheme } from '@/lib/theme';
 
 export function Attribution() {
+  const theme = useAppTheme();
+
   return (
-    <Text style={styles.text}>
+    <Text style={[styles.text, { color: theme.textMuted }]}>
       Data from{' '}
       <Text
-        style={styles.link}
+        style={[styles.link, { color: theme.accent }]}
         accessibilityRole="link"
         onPress={() => Linking.openURL('https://tatoeba.org')}
       >
@@ -20,7 +23,6 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 12,
     lineHeight: 18,
-    color: '#666666',
     marginTop: 8,
   },
   link: {
