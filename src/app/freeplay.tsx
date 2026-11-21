@@ -16,6 +16,7 @@ export default function FreeplayScreen() {
   const { sentences, sentencesRef, loading, error, loadMore } = useSentenceQueue({
     from: settings.from,
     to: settings.to,
+    limit: 40,
     requireTranslationAudio: true,
   });
   const {
