@@ -24,7 +24,6 @@ export default function FreeplayScreen() {
     currentIndex,
     currentSentence,
     playing,
-    preparing,
     fetchingMore,
     playbackError,
     play,
@@ -48,7 +47,7 @@ export default function FreeplayScreen() {
   const translationAudio = translation?.audios[0];
 
   const togglePlayback = () => {
-    if (preparing || fetchingMore) {
+    if (fetchingMore) {
       return;
     }
     if (playing) {
@@ -59,7 +58,7 @@ export default function FreeplayScreen() {
   };
 
   const changeIndex = (delta: number) => {
-    if (preparing || fetchingMore) {
+    if (fetchingMore) {
       return;
     }
     if (delta > 0) {
@@ -108,13 +107,11 @@ export default function FreeplayScreen() {
       <Text style={styles.tracker}>
         {fetchingMore
           ? 'Loading more…'
-          : preparing
-            ? 'Preparing…'
-            : loading
-              ? 'Loading…'
-              : sentences.length > 0
-                ? `${currentIndex + 1} / ${sentences.length}`
-                : ' '}
+          : loading
+            ? 'Loading…'
+            : sentences.length > 0
+              ? `${currentIndex + 1} / ${sentences.length}`
+              : ' '}
       </Text>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -134,21 +131,13 @@ export default function FreeplayScreen() {
         <Button
           label="Prev"
           onPress={() => changeIndex(-1)}
-          disabled={
-            preparing || fetchingMore || !currentSentence || currentIndex <= 0
-          }
+          disabled={fetchingMore || !currentSentence || currentIndex <= 0}
           style={styles.control}
         />
         <Button
-          label={
-            preparing || fetchingMore
-              ? 'Loading…'
-              : playing
-                ? 'Pause'
-                : 'Play'
-          }
+          label={fetchingMore ? 'Loading…' : playing ? 'Pause' : 'Play'}
           onPress={togglePlayback}
-          disabled={preparing || fetchingMore || !currentSentence}
+          disabled={fetchingMore || !currentSentence}
           variant="primary"
           style={styles.control}
         />
@@ -156,7 +145,6 @@ export default function FreeplayScreen() {
           label="Next"
           onPress={() => changeIndex(1)}
           disabled={
-            preparing ||
             fetchingMore ||
             !currentSentence ||
             currentIndex >= sentences.length - 1
@@ -203,7 +191,7 @@ export default function FreeplayScreen() {
                 : 'No more sentences'
           }
           onPress={fetchMore}
-          disabled={fetchingMore || preparing || !hasMore}
+          disabled={fetchingMore || !hasMore}
         />
       ) : null}
 
