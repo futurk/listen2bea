@@ -1,5 +1,6 @@
 import { useAudioPlaylist, useAudioPlaylistStatus } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 import {
   buildPlaylistTracks,
   clamp,
@@ -8,6 +9,11 @@ import {
 } from '@/lib/playlist';
 import type { Settings } from '@/lib/storage';
 import type { PlayableSentence } from '@/lib/types';
+
+// expo/expo#52192: on Android, moving a lock-screen-active AudioPlaylist to a
+// track appended after setActiveForLockScreen() crashes the app. Keep the
+// native queue but skip playlist lock-screen controls on Android for now.
+const supportsPlaylistLockScreen = Platform.OS !== 'android';
 
 interface UseFreeplayPlaylistOptions {
   sentences: PlayableSentence[];
@@ -69,7 +75,9 @@ export function useFreeplayPlaylist({
       setStarted(true);
       setIndex(start);
 
-      playlist.setActiveForLockScreen(true, metadataForSentence(list[start]));
+      if (supportsPlaylistLockScreen) {
+        playlist.setActiveForLockScreen(true, metadataForSentence(list[start]));
+      }
       playlist.skipTo(0);
       if (autoPlay) {
         playlist.play();
@@ -83,7 +91,9 @@ export function useFreeplayPlaylist({
       replaceQueue(currentIndex, settingsRef.current, true);
       return;
     }
-    playlist.setActiveForLockScreen(true, metadataForSentence(currentSentence));
+    if (supportsPlaylistLockScreen) {
+      playlist.setActiveForLockScreen(true, metadataForSentence(currentSentence));
+    }
     playlist.play();
   }, [currentIndex, currentSentence, playlist, replaceQueue, status.didJustFinish]);
 
@@ -185,7 +195,7 @@ export function useFreeplayPlaylist({
 
   // Keep the lock-screen title in sync with the current sentence.
   useEffect(() => {
-    if (started) {
+    if (started && supportsPlaylistLockScreen) {
       playlist.updateLockScreenMetadata(metadataForSentence(currentSentence));
     }
   }, [currentSentence, playlist, started]);
