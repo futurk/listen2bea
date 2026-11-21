@@ -44,7 +44,6 @@ export function useFreeplayPlaylist({
   const pendingIndexRef = useRef(0);
   const pendingNavigationRef = useRef(false);
   const desiredPlayingRef = useRef(false);
-  const interruptedRef = useRef(false);
   const rebuildingRef = useRef(false);
   const skipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchingMoreRef = useRef(false);
@@ -55,18 +54,50 @@ export function useFreeplayPlaylist({
 
   useEffect(() => {
     const subscription = playlist.addListener('playlistStatusUpdate', (raw) => {
-      const error = (raw as unknown as { error?: unknown }).error;
-      if (!error) {
+      const status = raw as unknown as {
+        error?: unknown;
+        currentIndex?: number;
+      };
+
+      if (status.error) {
+        if (skipTimerRef.current !== null) {
+          clearTimeout(skipTimerRef.current);
+          skipTimerRef.current = null;
+        }
+        desiredPlayingRef.current = false;
+        setPlaybackError('Playback interrupted. Press Play to retry.');
+        playlist.setActiveForLockScreen(false);
         return;
       }
-      if (skipTimerRef.current !== null) {
-        clearTimeout(skipTimerRef.current);
-        skipTimerRef.current = null;
+
+      const trackIndex = status.currentIndex;
+      if (
+        trackIndex == null ||
+        rebuildingRef.current ||
+        skipTimerRef.current !== null
+      ) {
+        return;
       }
-      interruptedRef.current = true;
-      desiredPlayingRef.current = false;
-      setPlaybackError('Playback interrupted. Press Play to retry.');
-      playlist.setActiveForLockScreen(false);
+      const sentenceIndex = entriesRef.current[trackIndex]?.sentenceIndex;
+      if (sentenceIndex == null) {
+        return;
+      }
+
+      if (pendingNavigationRef.current) {
+        if (sentenceIndex !== pendingIndexRef.current) {
+          return;
+        }
+        pendingNavigationRef.current = false;
+        setPendingIndex(null);
+        setIndex(sentenceIndex);
+        return;
+      }
+
+      // Fallback sync for platforms where trackChanged may not arrive.
+      if (sentenceIndex !== pendingIndexRef.current) {
+        pendingIndexRef.current = sentenceIndex;
+        setIndex(sentenceIndex);
+      }
     });
 
     return () => subscription.remove();
@@ -110,41 +141,6 @@ export function useFreeplayPlaylist({
     []
   );
 
-  useEffect(() => {
-    const subscription = playlist.addListener('playlistStatusUpdate', (raw) => {
-      const trackIndex = (raw as unknown as { currentIndex?: number }).currentIndex;
-      if (
-        trackIndex == null ||
-        rebuildingRef.current ||
-        skipTimerRef.current !== null
-      ) {
-        return;
-      }
-      const sentenceIndex = entriesRef.current[trackIndex]?.sentenceIndex;
-      if (sentenceIndex == null) {
-        return;
-      }
-
-      if (pendingNavigationRef.current) {
-        if (sentenceIndex !== pendingIndexRef.current) {
-          return;
-        }
-        pendingNavigationRef.current = false;
-        setPendingIndex(null);
-        setIndex(sentenceIndex);
-        return;
-      }
-
-      // Fallback sync for platforms where trackChanged may not arrive.
-      if (sentenceIndex !== pendingIndexRef.current) {
-        pendingIndexRef.current = sentenceIndex;
-        setIndex(sentenceIndex);
-      }
-    });
-
-    return () => subscription.remove();
-  }, [playlist]);
-
   const activeEntry = started ? entries[status.currentIndex] : undefined;
   const currentIndex = pendingIndex ?? activeEntry?.sentenceIndex ?? index;
   const currentSentence = sentences[currentIndex];
@@ -156,26 +152,23 @@ export function useFreeplayPlaylist({
     status.currentIndex >= entries.length - 1 &&
     !status.playing;
 
-  const flushPendingSkip = useCallback((): boolean => {
+  const flushPendingSkip = useCallback(() => {
     if (skipTimerRef.current === null) {
-      return false;
+      return;
     }
     clearTimeout(skipTimerRef.current);
     skipTimerRef.current = null;
 
     if (!startedRef.current) {
-      return false;
+      return;
     }
 
     const trackIndex = entriesRef.current.findIndex(
       (entry) => entry.sentenceIndex === pendingIndexRef.current
     );
-    if (trackIndex < 0) {
-      return false;
+    if (trackIndex >= 0) {
+      playlist.skipTo(trackIndex);
     }
-
-    playlist.skipTo(trackIndex);
-    return true;
   }, [playlist]);
 
   const replaceQueue = useCallback(
@@ -214,7 +207,6 @@ export function useFreeplayPlaylist({
         startedRef.current = true;
         setStarted(true);
         setIndex(start);
-        interruptedRef.current = false;
         rebuildingRef.current = false;
 
         playlist.setActiveForLockScreen(true, metadataForSentence(list[start]));
@@ -237,10 +229,7 @@ export function useFreeplayPlaylist({
     flushPendingSkip();
 
     const needsRebuild =
-      !startedRef.current ||
-      atEnd ||
-      interruptedRef.current ||
-      playbackError !== null;
+      !startedRef.current || atEnd || playbackError !== null;
 
     if (needsRebuild) {
       desiredPlayingRef.current = true;
@@ -250,7 +239,6 @@ export function useFreeplayPlaylist({
     }
 
     desiredPlayingRef.current = true;
-    interruptedRef.current = false;
     setPlaybackError(null);
     playlist.setActiveForLockScreen(true, metadataForSentence(currentSentence));
     playlist.play();
@@ -294,7 +282,7 @@ export function useFreeplayPlaylist({
         return;
       }
 
-      if (interruptedRef.current || playbackError !== null) {
+      if (playbackError !== null) {
         desiredPlayingRef.current = true;
         replaceQueue(nextIndex, settingsRef.current, true);
         return;
@@ -353,7 +341,6 @@ export function useFreeplayPlaylist({
     setPendingIndex(null);
     startedRef.current = false;
     setStarted(false);
-    interruptedRef.current = false;
     desiredPlayingRef.current = false;
     rebuildingRef.current = false;
     setPlaybackError(null);
