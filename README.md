@@ -64,7 +64,26 @@ It never appends to a playlist that is already active, which avoids an upstream 
 
 If a network error interrupts playback, the player enters an error state; pressing Play rebuilds the queue from the current sentence and retries.
 
+## Tatoeba API notes
+
+### Audio hosts
+
+Tatoeba audio is reachable through two hosts with very different behavior.
+
+- `https://audio.tatoeba.org/sentences/{lang}/{sentenceId}.mp3` is the static host. It responds in roughly **0.12–0.16 s**, even for parallel requests, and supports ranged requests. It uses the **sentence** ID, not the audio ID, and only serves that sentence's **first** recording.
+- `https://api.tatoeba.org/v1/audios/{audioId}/file` is the endpoint that can address any specific recording. It is slow and variable: during testing, time-to-first-byte was often **2–3 s** for files that are typically only **6–80 KB**, and parallel requests appeared to be serialized at roughly one every 3 seconds.
+- The API payload's own `download_url` points at `/v1/audio/{id}/file` (singular), which currently returns 404. The working endpoint uses the plural `audios`.
+- The app prefers the static host when the playable recording is the sentence's primary one, and falls back to the API endpoint otherwise.
+- The static host does not send CORS headers. It is used only by the `<audio>` element, which does not require CORS; avoid `fetch()`/preloading from it without checking that.
+- `HEAD` requests to the API file endpoint were not reliable during testing (they returned 404/redirects), so use `GET` when probing an audio URL.
+
+### Licenses and recordings
+
+- An empty or whitespace `license` means the author does not allow reuse outside Tatoeba. Both audio hosts return HTTP 403 for those recordings.
+- The v1 API cannot filter sentences by audio reuse license, so the app requests `include=audios` and filters client-side with `isReusableAudio`.
+- A sentence or translation can have multiple recordings. The app keeps only reusable ones. When the first recording is not reusable but several later ones are, it randomly chooses one while preparing the page; otherwise it uses the first reusable recording.
+- Audio metadata requires `include=audios`. Requiring a translation with audio also sends `trans:has_audio=yes`.
+
 ## Notes
 
-- Tatoeba recordings whose author disallows reuse outside Tatoeba return HTTP 403. These have an empty `license` field and are filtered out before they reach the player.
 - Audio author attribution is shown while practicing; the footer links back to Tatoeba.
