@@ -60,7 +60,7 @@ At runtime the app enables the session with `setAudioModeAsync({ shouldPlayInBac
 
 Freeplay builds the whole sequence (original, pause, translation, pause, repeat) into an `expo-audio` **native playlist**. The pauses are short silence tracks in `assets/audio/`, so the playlist keeps advancing while JavaScript is suspended and the screen is locked.
 
-Before starting, it prefetches roughly 30 sentences and builds the entire native queue. It never appends to a playlist that is already active, which avoids an upstream Android crash when a lock-screen session sees a timeline change ([expo/expo#52192](https://github.com/expo/expo/issues/52192)). When the buffered batch ends, press Play to fetch and start the next batch.
+It never appends to a playlist that is already active, which avoids an upstream Android crash when a lock-screen session sees a timeline change ([expo/expo#52192](https://github.com/expo/expo/issues/52192)). Instead, when the user reaches the last loaded sentence, a **Fetch more sentences** button requests exactly one more page and rebuilds the playlist from the first new sentence. It never fetches more automatically, to limit Tatoeba API usage. When no pages remain, the button shows **No more sentences**.
 
 If a network error interrupts playback, the player enters an error state; pressing Play rebuilds the queue from the current sentence and retries.
 

@@ -13,17 +13,19 @@ import { firstTranslationWithAudio } from '@/lib/tatoeba';
 
 export default function FreeplayScreen() {
   const { settings, update } = useSettings();
-  const { sentences, sentencesRef, loading, error, loadMore } = useSentenceQueue({
-    from: settings.from,
-    to: settings.to,
-    limit: 40,
-    requireTranslationAudio: true,
-  });
+  const { sentences, sentencesRef, loading, error, hasMore, loadMore } =
+    useSentenceQueue({
+      from: settings.from,
+      to: settings.to,
+      limit: 40,
+      requireTranslationAudio: true,
+    });
   const {
     currentIndex,
     currentSentence,
     playing,
     preparing,
+    fetchingMore,
     playbackError,
     play,
     pause,
@@ -31,6 +33,7 @@ export default function FreeplayScreen() {
     previous,
     reset,
     restart,
+    fetchMore,
   } = useFreeplayPlaylist({
     sentences,
     sentencesRef,
@@ -45,7 +48,7 @@ export default function FreeplayScreen() {
   const translationAudio = translation?.audios[0];
 
   const togglePlayback = () => {
-    if (preparing) {
+    if (preparing || fetchingMore) {
       return;
     }
     if (playing) {
@@ -56,6 +59,9 @@ export default function FreeplayScreen() {
   };
 
   const changeIndex = (delta: number) => {
+    if (preparing || fetchingMore) {
+      return;
+    }
     if (delta > 0) {
       next();
     } else {
@@ -100,13 +106,15 @@ export default function FreeplayScreen() {
       </View>
 
       <Text style={styles.tracker}>
-        {preparing
-          ? 'Preparing…'
-          : loading
-            ? 'Loading…'
-            : sentences.length > 0
-              ? `${currentIndex + 1} / ${sentences.length}`
-              : ' '}
+        {fetchingMore
+          ? 'Loading more…'
+          : preparing
+            ? 'Preparing…'
+            : loading
+              ? 'Loading…'
+              : sentences.length > 0
+                ? `${currentIndex + 1} / ${sentences.length}`
+                : ' '}
       </Text>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -126,13 +134,21 @@ export default function FreeplayScreen() {
         <Button
           label="Prev"
           onPress={() => changeIndex(-1)}
-          disabled={preparing || !currentSentence || currentIndex <= 0}
+          disabled={
+            preparing || fetchingMore || !currentSentence || currentIndex <= 0
+          }
           style={styles.control}
         />
         <Button
-          label={preparing ? 'Preparing…' : playing ? 'Pause' : 'Play'}
+          label={
+            preparing || fetchingMore
+              ? 'Loading…'
+              : playing
+                ? 'Pause'
+                : 'Play'
+          }
           onPress={togglePlayback}
-          disabled={preparing || !currentSentence}
+          disabled={preparing || fetchingMore || !currentSentence}
           variant="primary"
           style={styles.control}
         />
@@ -140,7 +156,10 @@ export default function FreeplayScreen() {
           label="Next"
           onPress={() => changeIndex(1)}
           disabled={
-            preparing || !currentSentence || currentIndex >= sentences.length - 1
+            preparing ||
+            fetchingMore ||
+            !currentSentence ||
+            currentIndex >= sentences.length - 1
           }
           style={styles.control}
         />
@@ -173,6 +192,20 @@ export default function FreeplayScreen() {
           disabled={settings.pauseSeconds >= 5}
         />
       </View>
+
+      {currentSentence && currentIndex >= sentences.length - 1 ? (
+        <Button
+          label={
+            fetchingMore
+              ? 'Loading more…'
+              : hasMore
+                ? 'Fetch more sentences'
+                : 'No more sentences'
+          }
+          onPress={fetchMore}
+          disabled={fetchingMore || preparing || !hasMore}
+        />
+      ) : null}
 
       <AudioCredits original={originalAudio} translation={translationAudio} />
       <Attribution />

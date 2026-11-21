@@ -9,8 +9,6 @@ import {
 import type { Settings } from '@/lib/storage';
 import type { PlayableSentence } from '@/lib/types';
 
-const PREFETCH_TARGET = 20;
-const PREFETCH_MAX_PAGES = 3;
 const NAVIGATION_SETTLE_MS = 200;
 
 interface UseFreeplayPlaylistOptions {
@@ -38,6 +36,7 @@ export function useFreeplayPlaylist({
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
   const [started, setStarted] = useState(false);
   const [preparing, setPreparing] = useState(false);
+  const [fetchingMore, setFetchingMore] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
 
   const entriesRef = useRef<QueueEntry[]>([]);
@@ -51,6 +50,7 @@ export function useFreeplayPlaylist({
   const interruptedRef = useRef(false);
   const rebuildingRef = useRef(false);
   const skipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchingMoreRef = useRef(false);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -170,25 +170,6 @@ export function useFreeplayPlaylist({
     return true;
   }, [playlist]);
 
-  const prefetch = useCallback(
-    async (minIndex: number) => {
-      let pages = 0;
-      while (
-        (sentencesRef.current.length < PREFETCH_TARGET ||
-          sentencesRef.current.length <= minIndex) &&
-        pages < PREFETCH_MAX_PAGES
-      ) {
-        const before = sentencesRef.current.length;
-        await loadMore();
-        pages++;
-        if (sentencesRef.current.length === before) {
-          break;
-        }
-      }
-    },
-    [loadMore, sentencesRef]
-  );
-
   const replaceQueue = useCallback(
     async (sentenceIndex: number, config: Settings, autoPlay: boolean) => {
       const prepareId = ++prepareIdRef.current;
@@ -203,11 +184,6 @@ export function useFreeplayPlaylist({
       rebuildingRef.current = true;
 
       try {
-        await prefetch(sentenceIndex);
-        if (prepareId !== prepareIdRef.current) {
-          return;
-        }
-
         const list = sentencesRef.current;
         if (list.length === 0) {
           return;
@@ -254,7 +230,7 @@ export function useFreeplayPlaylist({
         }
       }
     },
-    [playlist, prefetch, sentencesRef]
+    [playlist, sentencesRef]
   );
 
   const play = useCallback(() => {
@@ -400,6 +376,46 @@ export function useFreeplayPlaylist({
     [replaceQueue]
   );
 
+  const fetchMore = useCallback(async () => {
+    if (fetchingMoreRef.current || preparing) {
+      return;
+    }
+
+    fetchingMoreRef.current = true;
+    setFetchingMore(true);
+    setPlaybackError(null);
+
+    const before = sentencesRef.current.length;
+    const wasStarted = startedRef.current;
+    const shouldPlay = desiredPlayingRef.current;
+
+    try {
+      await loadMore();
+
+      if (sentencesRef.current.length <= before) {
+        setPlaybackError('No new usable sentences were returned. Try again later.');
+        return;
+      }
+
+      if (!wasStarted) {
+        pendingIndexRef.current = before;
+        pendingNavigationRef.current = true;
+        setPendingIndex(before);
+        setIndex(before);
+        return;
+      }
+
+      await replaceQueue(before, settingsRef.current, shouldPlay);
+    } catch (error) {
+      setPlaybackError(
+        error instanceof Error ? error.message : 'Could not load more sentences.'
+      );
+    } finally {
+      fetchingMoreRef.current = false;
+      setFetchingMore(false);
+    }
+  }, [loadMore, preparing, replaceQueue, sentencesRef]);
+
   // Keep the lock-screen title in sync with the current sentence.
   useEffect(() => {
     if (started) {
@@ -418,6 +434,7 @@ export function useFreeplayPlaylist({
     currentSentence,
     playing,
     preparing,
+    fetchingMore,
     playbackError,
     play,
     pause,
@@ -425,5 +442,6 @@ export function useFreeplayPlaylist({
     previous,
     reset,
     restart,
+    fetchMore,
   };
 }
