@@ -21,6 +21,7 @@ export function useSentenceQueue({
   const [sentences, setSentences] = useState<PlayableSentence[]>([]);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
 
   const sentencesRef = useRef<PlayableSentence[]>([]);
   const nextUrlRef = useRef<string | null>(null);
@@ -38,6 +39,7 @@ export function useSentenceQueue({
       if (reset) {
         setLoading(true);
         setError(null);
+        setHasMore(false);
         nextUrlRef.current = null;
       }
 
@@ -56,6 +58,7 @@ export function useSentenceQueue({
         }
 
         nextUrlRef.current = page.next;
+        setHasMore(Boolean(page.next));
         const next = reset ? page.sentences : [...sentencesRef.current, ...page.sentences];
         commit(next);
 
@@ -88,6 +91,7 @@ export function useSentenceQueue({
     nextUrlRef.current = null;
     commit([]);
     setError(null);
+    setHasMore(false);
     setLoading(false);
   }, [commit]);
 
@@ -105,5 +109,5 @@ export function useSentenceQueue({
     return () => clearTimeout(timer);
   }, [enabled, load]);
 
-  return { sentences, sentencesRef, loading, error, load, loadMore, reset };
+  return { sentences, sentencesRef, loading, error, hasMore, load, loadMore, reset };
 }
