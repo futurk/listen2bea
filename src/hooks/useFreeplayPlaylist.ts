@@ -255,6 +255,16 @@ export function useFreeplayPlaylist({
     desiredPlayingRef.current = false;
     flushPendingSkip();
     playlist.pause();
+
+    // Pause the playlist at the beginning of the current sentence rather than
+    // mid-clip, so Play always restarts the sentence from its original audio.
+    const trackIndex = entriesRef.current.findIndex(
+      (entry) => entry.sentenceIndex === pendingIndexRef.current
+    );
+    if (trackIndex >= 0) {
+      playlist.skipTo(trackIndex);
+      void playlist.seekTo(0).catch(() => {});
+    }
   }, [flushPendingSkip, playlist]);
 
   const goTo = useCallback(
