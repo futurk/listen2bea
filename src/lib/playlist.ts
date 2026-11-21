@@ -97,3 +97,44 @@ export const buildPlaylistTracks = (
 
   return tracks;
 };
+
+export interface PlaylistPlan {
+  tracks: BuiltTrack[];
+  /** Absolute sentence index -> index of that sentence's first (original) track. */
+  sentenceStarts: Map<number, number>;
+  lastSentenceIndex: number;
+  lastTrackIndex: number;
+}
+
+export const buildPlaylistPlan = (
+  sentences: PlayableSentence[],
+  startIndex: number,
+  settings: Settings
+): PlaylistPlan => {
+  const tracks = buildPlaylistTracks(sentences.slice(startIndex), startIndex, settings);
+  const sentenceStarts = new Map<number, number>();
+
+  tracks.forEach((track, trackIndex) => {
+    if (!sentenceStarts.has(track.entry.sentenceIndex)) {
+      sentenceStarts.set(track.entry.sentenceIndex, trackIndex);
+    }
+  });
+
+  return {
+    tracks,
+    sentenceStarts,
+    lastSentenceIndex: sentences.length - 1,
+    lastTrackIndex: tracks.length - 1,
+  };
+};
+
+export const findSentenceStart = (
+  plan: PlaylistPlan,
+  sentenceIndex: number
+): number | null => plan.sentenceStarts.get(sentenceIndex) ?? null;
+
+export const sentenceAtTrack = (
+  plan: PlaylistPlan,
+  trackIndex: number
+): number | null => plan.tracks[trackIndex]?.entry.sentenceIndex ?? null;
+
