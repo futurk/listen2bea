@@ -14,7 +14,15 @@ export function Attribution() {
       >
         Tatoeba
       </Text>
-      . Please consider contributing or donating if you find this useful.
+      {'. Source code is on '}
+      <Text
+        style={[styles.link, { color: theme.accent }]}
+        accessibilityRole="link"
+        onPress={() => Linking.openURL('https://github.com/futurk/listen2bea')}
+      >
+        GitHub
+      </Text>
+      {'. Please consider contributing or donating if you find this tool useful.'}
     </Text>
   );
 }
