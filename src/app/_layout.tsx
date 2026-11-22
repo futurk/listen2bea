@@ -1,3 +1,4 @@
+import { setAudioModeAsync } from 'expo-audio';
 import {
   DarkTheme,
   DefaultTheme,
@@ -15,6 +16,19 @@ import { useAppTheme } from '@/lib/theme';
 export default function RootLayout() {
   const scheme = useColorScheme();
   const theme = useAppTheme();
+
+  useEffect(() => {
+    // Background playback and lock-screen controls depend on this. Without
+    // shouldPlayInBackground, expo-audio pauses playback when the activity
+    // backgrounds, including when the screen locks.
+    void setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: 'doNotMix',
+    }).catch((error) => {
+      console.warn('Failed to configure audio mode', error);
+    });
+  }, []);
 
   const navigationTheme = useMemo<Theme>(() => {
     const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
