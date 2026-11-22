@@ -4,6 +4,7 @@ import {
   type AudioPlaylistStatus,
 } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { executeFreeplayCommand } from '@/lib/freeplayExecutor';
 import {
   initialFreeplayState,
   reduceFreeplay,
@@ -14,7 +15,6 @@ import {
 import {
   buildPlaylistPlan,
   clamp,
-  findSentenceStart,
   metadataForSentence,
   sentenceAtTrack,
   type PlaylistPlan,
@@ -23,7 +23,6 @@ import type { Settings } from '@/lib/storage';
 import type { PlayableSentence } from '@/lib/types';
 
 const NAVIGATION_SETTLE_MS = 200;
-const LOAD_SETTLE_MS = 100;
 const COMMAND_FAILURE_MESSAGE =
   'Could not prepare playback. Press Play to retry.';
 
@@ -69,85 +68,13 @@ export function useFreeplayPlaylist({
 
   const executeCommand = useCallback(
     (command: FreeplayCommand) => {
-      const currentState = stateRef.current;
-
-      switch (command.type) {
-        case 'load': {
-          const token = ++loadTokenRef.current;
-          rebuildingRef.current = true;
-
-          try {
-            playlist.setActiveForLockScreen(false);
-            playlist.pause();
-            playlist.clear();
-            command.plan.tracks.forEach((track) => playlist.add(track.source));
-
-            const sentence = sentencesRef.current[command.startSentence];
-            playlist.setActiveForLockScreen(true, metadataForSentence(sentence));
-            playlist.skipTo(0);
-            if (command.autoPlay) {
-              playlist.play();
-            }
-          } catch (error) {
-            rebuildingRef.current = false;
-            loadTokenRef.current++;
-            throw error;
-          }
-
-          setTimeout(() => {
-            if (loadTokenRef.current === token) {
-              rebuildingRef.current = false;
-            }
-          }, LOAD_SETTLE_MS);
-          return;
-        }
-
-        case 'skipToSentence': {
-          const plan = currentState.plan;
-          const trackIndex = plan
-            ? findSentenceStart(plan, command.sentenceIndex)
-            : null;
-          if (trackIndex == null) {
-            return;
-          }
-
-          playlist.skipTo(trackIndex);
-          if (command.play) {
-            playlist.play();
-          }
-          return;
-        }
-
-        case 'pauseAtSentenceStart': {
-          const plan = currentState.plan;
-          const trackIndex = plan
-            ? findSentenceStart(plan, command.sentenceIndex)
-            : null;
-
-          playlist.pause();
-          if (trackIndex != null) {
-            playlist.skipTo(trackIndex);
-            void playlist.seekTo(0).catch(() => {});
-          }
-          return;
-        }
-
-        case 'resume': {
-          playlist.play();
-          return;
-        }
-
-        case 'deactivate':
-          playlist.pause();
-          playlist.setActiveForLockScreen(false);
-          return;
-
-        case 'reset':
-          playlist.setActiveForLockScreen(false);
-          playlist.pause();
-          playlist.clear();
-          return;
-      }
+      executeFreeplayCommand(
+        {
+          playlist,
+          refs: { stateRef, sentencesRef, loadTokenRef, rebuildingRef },
+        },
+        command
+      );
     },
     [playlist, sentencesRef]
   );
