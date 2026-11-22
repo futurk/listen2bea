@@ -179,6 +179,19 @@ export const staticAudioFileUrl = (lang: string, sentenceId: number): string =>
 export const audioFileUrl = (audio: Pick<Audio, 'id'>): string =>
   `${TATOEBA_API_BASE}/v1/audios/${audio.id}/file`;
 
+/**
+ * Prefer the fast static host, but only when the playable recording is the
+ * item's first one. The static host cannot address any other recording.
+ */
+export const audioUrlFor = (
+  item: PlayableSentence | PlayableTranslation
+): string => {
+  const audio = item.audios[0];
+  return audio.id === item.primaryAudioId
+    ? staticAudioFileUrl(item.lang, item.id)
+    : audioFileUrl(audio);
+};
+
 export const firstTranslationWithAudio = (
   sentence?: PlayableSentence | null
 ): PlayableTranslation | null =>

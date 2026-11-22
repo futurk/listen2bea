@@ -1,12 +1,8 @@
 import type { AudioSource } from 'expo-audio';
 import { Asset } from 'expo-asset';
 import type { Settings } from './storage';
-import {
-  audioFileUrl,
-  firstTranslationWithAudio,
-  staticAudioFileUrl,
-} from './tatoeba';
-import type { PlayableSentence, PlayableTranslation } from './types';
+import { audioUrlFor, firstTranslationWithAudio } from './tatoeba';
+import type { PlayableSentence } from './types';
 
 export type ClipKind = 'original' | 'translation' | 'repeat' | 'pause';
 
@@ -35,19 +31,6 @@ export const SILENCE_TRACKS: number[] = [
  * expo-audio's JS wrapper.
  */
 const remoteSource = (url: string): AudioSource => ({ uri: url });
-
-/**
- * Prefer the fast static host, but only when the playable recording is the
- * sentence's first one. The static host cannot address any other recording.
- */
-const audioSourceFor = (item: PlayableSentence | PlayableTranslation): AudioSource => {
-  const audio = item.audios[0];
-  const url =
-    audio.id === item.primaryAudioId
-      ? staticAudioFileUrl(item.lang, item.id)
-      : audioFileUrl(audio);
-  return remoteSource(url);
-};
 
 const silenceSource = (moduleId: number): AudioSource => {
   const asset = Asset.fromModule(moduleId);
@@ -97,16 +80,16 @@ export const buildPlaylistTracks = (
       tracks.push({ source, entry: { sentenceIndex, kind } });
     };
 
-    push(audioSourceFor(sentence), 'original');
+    push(remoteSource(audioUrlFor(sentence)), 'original');
     push(pauseTrack, 'pause');
 
     if (translation) {
-      push(audioSourceFor(translation), 'translation');
+      push(remoteSource(audioUrlFor(translation)), 'translation');
       push(pauseTrack, 'pause');
     }
 
     if (settings.repeatOriginal) {
-      push(audioSourceFor(sentence), 'repeat');
+      push(remoteSource(audioUrlFor(sentence)), 'repeat');
       push(pauseTrack, 'pause');
     }
   });

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
   audioFileUrl,
+  audioUrlFor,
   buildSentenceSearchUrl,
   clearSentencePageCache,
   fetchSentencePage,
@@ -229,6 +230,30 @@ describe('audioFileUrl', () => {
   it('builds the static sentence audio URL', () => {
     expect(staticAudioFileUrl('deu', 2525369)).toBe(
       'https://audio.tatoeba.org/sentences/deu/2525369.mp3'
+    );
+  });
+});
+
+describe('audioUrlFor', () => {
+  it('uses the static host for primary sentence and translation recordings', () => {
+    const [prepared] = prepareSentences([sentence()], false);
+
+    expect(audioUrlFor(prepared)).toBe(
+      'https://audio.tatoeba.org/sentences/deu/1.mp3'
+    );
+    expect(audioUrlFor(prepared.translations[0])).toBe(
+      'https://audio.tatoeba.org/sentences/eng/2.mp3'
+    );
+  });
+
+  it('falls back to the API when the playable recording is not primary', () => {
+    const [prepared] = prepareSentences(
+      [sentence({ audios: [usableAudio(1, ''), usableAudio(2)] })],
+      false
+    );
+
+    expect(audioUrlFor(prepared)).toBe(
+      'https://api.tatoeba.org/v1/audios/2/file'
     );
   });
 });

@@ -18,7 +18,7 @@ import { isAbortError, useClipPlayer } from '@/hooks/useClipPlayer';
 import { useSentenceQueue } from '@/hooks/useSentenceQueue';
 import { useSettings } from '@/hooks/useSettings';
 import type { LanguageCode } from '@/lib/languages';
-import { audioFileUrl } from '@/lib/tatoeba';
+import { audioUrlFor } from '@/lib/tatoeba';
 import { useAppTheme } from '@/lib/theme';
 
 export default function DictationScreen() {
@@ -77,11 +77,11 @@ export default function DictationScreen() {
   };
 
   const handlePlay = () => {
-    if (!originalAudio) {
+    if (!current || !originalAudio) {
       return;
     }
     setMessage(null);
-    void playClip(audioFileUrl(originalAudio)).catch((playbackError) => {
+    void playClip(audioUrlFor(current)).catch((playbackError) => {
       if (!isAbortError(playbackError)) {
         setMessage('Audio unavailable for this sentence.');
       }
