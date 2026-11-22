@@ -300,4 +300,34 @@ describe('fetchSentencePage', () => {
       'Tatoeba request failed (403)'
     );
   });
+
+  it('rejects immediately when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      fetchSentencePage('https://example.test/aborted', {
+        signal: controller.signal,
+      })
+    ).rejects.toThrow('Aborted');
+  });
+
+  it('stops an in-flight request when its signal aborts', async () => {
+    globalThis.fetch = jest.fn(
+      (_url: string, init?: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        })
+    ) as unknown as typeof fetch;
+
+    const controller = new AbortController();
+    const request = fetchSentencePage('https://example.test/slow', {
+      signal: controller.signal,
+    });
+    controller.abort();
+
+    await expect(request).rejects.toThrow('Aborted');
+  });
 });

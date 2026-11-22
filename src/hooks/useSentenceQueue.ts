@@ -11,6 +11,8 @@ interface UseSentenceQueueOptions {
   enabled?: boolean;
 }
 
+const REQUEST_TIMEOUT_MS = 15_000;
+
 export function useSentenceQueue({
   from,
   to,
@@ -26,6 +28,7 @@ export function useSentenceQueue({
   const sentencesRef = useRef<PlayableSentence[]>([]);
   const nextUrlRef = useRef<string | null>(null);
   const requestIdRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
 
   const commit = useCallback((next: PlayableSentence[]) => {
     sentencesRef.current = next;
@@ -35,6 +38,15 @@ export function useSentenceQueue({
   const load = useCallback(
     async (reset = true) => {
       const requestId = ++requestIdRef.current;
+
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      let timedOut = false;
+      const timeout = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, REQUEST_TIMEOUT_MS);
 
       if (reset) {
         setLoading(true);
@@ -52,7 +64,10 @@ export function useSentenceQueue({
           return;
         }
 
-        const page = await fetchSentencePage(url, { requireTranslationAudio });
+        const page = await fetchSentencePage(url, {
+          requireTranslationAudio,
+          signal: controller.signal,
+        });
         if (requestId !== requestIdRef.current) {
           return;
         }
@@ -69,8 +84,18 @@ export function useSentenceQueue({
         if (requestId !== requestIdRef.current) {
           return;
         }
-        setError(err instanceof Error ? err.message : 'Could not load sentences.');
+        setError(
+          timedOut
+            ? 'Tatoeba request timed out. Try again.'
+            : err instanceof Error
+              ? err.message
+              : 'Could not load sentences.'
+        );
       } finally {
+        clearTimeout(timeout);
+        if (abortRef.current === controller) {
+          abortRef.current = null;
+        }
         if (requestId === requestIdRef.current) {
           setLoading(false);
         }
@@ -88,12 +113,23 @@ export function useSentenceQueue({
 
   const reset = useCallback(() => {
     requestIdRef.current++;
+    abortRef.current?.abort();
+    abortRef.current = null;
     nextUrlRef.current = null;
     commit([]);
     setError(null);
     setHasMore(false);
     setLoading(false);
   }, [commit]);
+
+  useEffect(
+    () => () => {
+      requestIdRef.current++;
+      abortRef.current?.abort();
+      abortRef.current = null;
+    },
+    []
+  );
 
   useEffect(() => {
     if (!enabled) {
