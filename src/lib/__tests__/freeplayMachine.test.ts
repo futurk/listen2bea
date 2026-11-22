@@ -115,6 +115,55 @@ describe('reduceFreeplay', () => {
     expect(transition.commands).toEqual([]);
   });
 
+  it('adopts playback started from the lock screen', () => {
+    const paused = startedState({ status: 'paused', intent: 'paused' });
+
+    const transition = reduceFreeplay(paused, {
+      type: 'nativePlaybackChanged',
+      playing: true,
+    });
+
+    expect(transition.state.status).toBe('playing');
+    expect(transition.state.intent).toBe('playing');
+    expect(transition.commands).toEqual([]);
+  });
+
+  it('adopts playback paused from the lock screen', () => {
+    const transition = reduceFreeplay(startedState(), {
+      type: 'nativePlaybackChanged',
+      playing: false,
+    });
+
+    expect(transition.state.status).toBe('paused');
+    expect(transition.state.intent).toBe('paused');
+    expect(transition.commands).toEqual([]);
+  });
+
+  it('keeps the same state for a matching native playback update', () => {
+    const state = startedState();
+
+    const transition = reduceFreeplay(state, {
+      type: 'nativePlaybackChanged',
+      playing: true,
+    });
+
+    expect(transition.state).toBe(state);
+  });
+
+  it('ignores native playback updates after an interruption', () => {
+    const interrupted = reduceFreeplay(startedState(), {
+      type: 'playerError',
+      message: 'network',
+    }).state;
+
+    const transition = reduceFreeplay(interrupted, {
+      type: 'nativePlaybackChanged',
+      playing: true,
+    });
+
+    expect(transition.state).toBe(interrupted);
+  });
+
   it('pauses at the beginning of the pending sentence', () => {
     const targetState = reduceFreeplay(startedState(), {
       type: 'setTarget',

@@ -214,6 +214,13 @@ export function useFreeplayPlaylist({
 
       applyRef.current({ type: 'trackChanged', sentenceIndex });
 
+      if (!event.isBuffering && !event.didJustFinish) {
+        applyRef.current({
+          type: 'nativePlaybackChanged',
+          playing: event.playing,
+        });
+      }
+
       if (
         event.didJustFinish &&
         event.currentIndex >= plan.lastTrackIndex &&

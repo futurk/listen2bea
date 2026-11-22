@@ -27,6 +27,7 @@ export type FreeplayAction =
   | { type: 'pause' }
   | { type: 'navigate'; sentenceIndex: number; play: boolean }
   | { type: 'trackChanged'; sentenceIndex: number }
+  | { type: 'nativePlaybackChanged'; playing: boolean }
   | { type: 'playerError'; message: string }
   | { type: 'playerEnded' }
   | { type: 'replan'; plan: PlaylistPlan; sentenceIndex: number; autoPlay: boolean }
@@ -177,6 +178,21 @@ export function reduceFreeplay(
         currentSentence: action.sentenceIndex,
         targetSentence: null,
       });
+
+    case 'nativePlaybackChanged': {
+      if (!state.plan || state.status === 'interrupted' || state.status === 'ended') {
+        return idle(state);
+      }
+      const intent = action.playing ? 'playing' : 'paused';
+      if (state.intent === intent) {
+        return idle(state);
+      }
+      return idle({
+        ...state,
+        status: intent,
+        intent,
+      });
+    }
 
     case 'playerError':
       if (state.status === 'interrupted' && state.error === action.message) {
