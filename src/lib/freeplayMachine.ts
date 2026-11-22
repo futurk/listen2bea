@@ -189,6 +189,7 @@ export function reduceFreeplay(
           intent: 'paused',
           error: action.message,
           targetSentence: null,
+          fetchingMore: false,
         },
         commands: [{ type: 'deactivate' }],
       };

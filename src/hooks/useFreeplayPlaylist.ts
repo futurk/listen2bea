@@ -24,6 +24,8 @@ import type { PlayableSentence } from '@/lib/types';
 
 const NAVIGATION_SETTLE_MS = 200;
 const LOAD_SETTLE_MS = 100;
+const COMMAND_FAILURE_MESSAGE =
+  'Could not prepare playback. Press Play to retry.';
 
 interface UseFreeplayPlaylistOptions {
   sentences: PlayableSentence[];
@@ -74,16 +76,22 @@ export function useFreeplayPlaylist({
           const token = ++loadTokenRef.current;
           rebuildingRef.current = true;
 
-          playlist.setActiveForLockScreen(false);
-          playlist.pause();
-          playlist.clear();
-          command.plan.tracks.forEach((track) => playlist.add(track.source));
+          try {
+            playlist.setActiveForLockScreen(false);
+            playlist.pause();
+            playlist.clear();
+            command.plan.tracks.forEach((track) => playlist.add(track.source));
 
-          const sentence = sentencesRef.current[command.startSentence];
-          playlist.setActiveForLockScreen(true, metadataForSentence(sentence));
-          playlist.skipTo(0);
-          if (command.autoPlay) {
-            playlist.play();
+            const sentence = sentencesRef.current[command.startSentence];
+            playlist.setActiveForLockScreen(true, metadataForSentence(sentence));
+            playlist.skipTo(0);
+            if (command.autoPlay) {
+              playlist.play();
+            }
+          } catch (error) {
+            rebuildingRef.current = false;
+            loadTokenRef.current++;
+            throw error;
           }
 
           setTimeout(() => {
@@ -130,6 +138,7 @@ export function useFreeplayPlaylist({
         }
 
         case 'deactivate':
+          playlist.pause();
           playlist.setActiveForLockScreen(false);
           return;
 
@@ -148,7 +157,25 @@ export function useFreeplayPlaylist({
       const transition = reduceFreeplay(stateRef.current, action);
       stateRef.current = transition.state;
       setState(transition.state);
-      transition.commands.forEach(executeCommand);
+
+      try {
+        transition.commands.forEach(executeCommand);
+      } catch (error) {
+        console.warn('Freeplay playback command failed', error);
+        const failure = reduceFreeplay(stateRef.current, {
+          type: 'playerError',
+          message: COMMAND_FAILURE_MESSAGE,
+        });
+        stateRef.current = failure.state;
+        setState(failure.state);
+        failure.commands.forEach((command) => {
+          try {
+            executeCommand(command);
+          } catch (recoveryError) {
+            console.warn('Freeplay playback recovery failed', recoveryError);
+          }
+        });
+      }
     },
     [executeCommand]
   );

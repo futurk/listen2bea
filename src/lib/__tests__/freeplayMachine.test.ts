@@ -143,6 +143,19 @@ describe('reduceFreeplay', () => {
     expect(transition.commands).toEqual([{ type: 'deactivate' }]);
   });
 
+  it('clears the fetching flag when playback errors', () => {
+    const fetching = reduceFreeplay(startedState(), {
+      type: 'fetchingStarted',
+    }).state;
+
+    const transition = reduceFreeplay(fetching, {
+      type: 'playerError',
+      message: 'network',
+    });
+
+    expect(transition.state.fetchingMore).toBe(false);
+  });
+
   it('marks the session as ended once', () => {
     const first = reduceFreeplay(startedState(), { type: 'playerEnded' });
     expect(first.state.status).toBe('ended');
