@@ -1,4 +1,8 @@
-import { useAudioPlaylist, useAudioPlaylistStatus } from 'expo-audio';
+import {
+  useAudioPlaylist,
+  useAudioPlaylistStatus,
+  type AudioPlaylistStatus,
+} from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   initialFreeplayState,
@@ -159,11 +163,7 @@ export function useFreeplayPlaylist({
 
   useEffect(() => {
     const subscription = playlist.addListener('playlistStatusUpdate', (raw) => {
-      const event = raw as unknown as {
-        error?: unknown;
-        currentIndex?: number;
-        playing?: boolean;
-      };
+      const event = raw as AudioPlaylistStatus & { error?: unknown };
 
       if (event.error) {
         if (stateRef.current.plan) {
