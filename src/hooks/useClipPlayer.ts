@@ -82,15 +82,18 @@ export function useClipPlayer() {
 
       const onAbort = () => {
         player.pause();
+        player.clearLockScreenControls();
         settle(() => reject(abortError()));
       };
 
       const subscription = player.addListener('playbackStatusUpdate', (status) => {
         if (status.error) {
+          player.clearLockScreenControls();
           settle(() => reject(new Error(status.error ?? 'Audio playback failed')));
           return;
         }
         if (status.didJustFinish) {
+          player.clearLockScreenControls();
           settle(resolve);
         }
       });
