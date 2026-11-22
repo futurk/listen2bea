@@ -13,7 +13,6 @@ const plan: PlaylistPlan = {
     [1, 3],
     [2, 6],
   ]),
-  lastSentenceIndex: 2,
   lastTrackIndex: 8,
 };
 

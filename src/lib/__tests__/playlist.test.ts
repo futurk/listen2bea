@@ -163,7 +163,6 @@ describe('buildPlaylistPlan', () => {
 
     expect(plan.sentenceStarts.get(0)).toBe(0);
     expect(plan.sentenceStarts.get(1)).toBe(6);
-    expect(plan.lastSentenceIndex).toBe(1);
     expect(plan.lastTrackIndex).toBe(11);
     expect(sentenceAtTrack(plan, 6)).toBe(1);
     expect(findSentenceStart(plan, 1)).toBe(6);
@@ -178,7 +177,6 @@ describe('buildPlaylistPlan', () => {
 
     expect(plan.sentenceStarts.has(0)).toBe(false);
     expect(plan.sentenceStarts.get(1)).toBe(0);
-    expect(plan.lastSentenceIndex).toBe(1);
   });
 });
 

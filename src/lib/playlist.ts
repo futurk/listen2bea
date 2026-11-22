@@ -101,7 +101,6 @@ export interface PlaylistPlan {
   tracks: BuiltTrack[];
   /** Absolute sentence index -> index of that sentence's first (original) track. */
   sentenceStarts: Map<number, number>;
-  lastSentenceIndex: number;
   lastTrackIndex: number;
 }
 
@@ -122,7 +121,6 @@ export const buildPlaylistPlan = (
   return {
     tracks,
     sentenceStarts,
-    lastSentenceIndex: sentences.length - 1,
     lastTrackIndex: tracks.length - 1,
   };
 };
