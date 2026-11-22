@@ -36,6 +36,8 @@ npm run export:web
 
 Typed routes are generated in `.expo/types` by `expo start` or `expo export`; run one of those once before `npm run typecheck` on a fresh checkout.
 
+CI runs the typecheck, lint, test suite, and a web export on every push to `main` and every pull request (`.github/workflows/ci.yml`).
+
 Copy `.env.example` to `.env` if you need to override the Tatoeba sentences endpoint. The default is `https://api.tatoeba.org/v1/sentences`.
 
 ## Project layout
