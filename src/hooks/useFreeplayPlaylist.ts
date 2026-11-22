@@ -188,7 +188,7 @@ export function useFreeplayPlaylist({
       applyRef.current({ type: 'trackChanged', sentenceIndex });
 
       if (
-        event.playing === false &&
+        event.didJustFinish &&
         event.currentIndex >= plan.lastTrackIndex &&
         stateRef.current.status !== 'ended' &&
         stateRef.current.status !== 'interrupted'
