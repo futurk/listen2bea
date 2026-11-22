@@ -105,8 +105,6 @@ export function useFreeplayPlaylist({
 
           playlist.skipTo(trackIndex);
           if (command.play) {
-            const sentence = sentencesRef.current[command.sentenceIndex];
-            playlist.setActiveForLockScreen(true, metadataForSentence(sentence));
             playlist.play();
           }
           return;
@@ -127,8 +125,6 @@ export function useFreeplayPlaylist({
         }
 
         case 'resume': {
-          const sentence = sentencesRef.current[command.sentenceIndex];
-          playlist.setActiveForLockScreen(true, metadataForSentence(sentence));
           playlist.play();
           return;
         }
