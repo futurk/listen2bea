@@ -45,7 +45,8 @@ src/
   app/          Expo Router screens (_layout, index, freeplay, dictation)
   components/   small presentational components
   hooks/        sentence queue, native playlist, clip player, settings
-  lib/          Tatoeba client, types, languages, storage
+  lib/          Tatoeba client, playlist plan, freeplay state machine, types,
+                languages, storage, theme
 ```
 
 ## Background playback
